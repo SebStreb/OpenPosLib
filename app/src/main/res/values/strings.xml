@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">GNSS Positioning</string>
+    <string name="service_running">Positioning service is running.</string>
+    <string name="antenna_connection_error">Connection error with the antenna</string>
+    <string name="force_stop">Force stop</string>
+    <string name="none">None</string>
+    <string name="last_measured_position">Last measured position</string>
+    <string name="start_service">Start Service</string>
+    <string name="positioning_service_status">Positioning Service Status</string>
+    <string name="unplugged">Antenna unplugged</string>
+    <string name="stop_service">Stop service</string>
+    <string name="perm_refused">Antenna permission refused</string>
+    <string name="service_started">Service started</string>
+    <string name="not_plugged_in">Antenna not plugged in</string>
+    <string name="stopped">Service stopped</string>
+    <string name="app_closed">Application closed</string>
+    <string name="latitude">Latitude</string>
+    <string name="longitude">Longitude</string>
+    <string name="altitude">Altitude</string>
+    <string name="precision">Precision</string>
+    <string name="lat_lon">%.6f</string>
+    <string name="alt">%.2f m</string>
+    <string name="prec">%.2f cm</string>
+    <string name="perm_not_granted">Location permissions not granted</string>
+    <string name="gps_disabled">GPS disabled</string>
+    <string name="positioning_service_mode">Positioning Service Mode</string>
+    <string name="change_exec_mode">Changing execution mode</string>
+</resources>

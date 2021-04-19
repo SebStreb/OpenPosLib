@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+
+    android:orientation="vertical"
+    android:gravity="center"
+
+    tools:context=".example.MainActivity">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:textSize="10pt"
+        android:textStyle="bold"
+
+        android:text="@string/positioning_service_mode" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="8dp" />
+
+    <Spinner
+        android:id="@+id/service_mode"
+
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="32dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:textSize="10pt"
+        android:textStyle="bold"
+
+        android:text="@string/positioning_service_status" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="8dp" />
+
+    <TextView
+        android:id="@+id/service_status"
+
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:textSize="8pt"
+
+        android:text="@string/stopped" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="32dp" />
+
+    <Button
+        android:id="@+id/toggle_service"
+
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:backgroundTint="@color/purple_500"
+        android:text="@string/start_service" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="32dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+
+        android:textSize="10pt"
+        android:textStyle="bold"
+
+        android:text="@string/last_measured_position" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="8dp" />
+
+    <RelativeLayout
+        android:layout_width="192dp"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/latitude"
+
+            android:text="@string/latitude"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/latitude"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="192dp"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/longitude"
+
+            android:text="@string/longitude"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/longitude"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="192dp"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/altitude"
+
+            android:text="@string/altitude"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/altitude"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="192dp"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/precision"
+
+            android:text="@string/precision"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/precision"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+</LinearLayout>
+

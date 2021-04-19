@@ -1,0 +1,93 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'kotlin-parcelize'
+}
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion "30.0.1"
+
+    defaultConfig {
+        applicationId "be.ac.ucl.gnsspositioning"
+        minSdkVersion 26
+        targetSdkVersion 30
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            buildConfigField("String", "CORS_ADDRESS", getCorsAddress())
+            buildConfigField("Integer", "CORS_PORT", getCorsPort())
+            buildConfigField("String", "CORS_MOUNT_POINT", getCorsMountPoint())
+            buildConfigField("String", "CORS_USERNAME", getCorsUsername())
+            buildConfigField("String", "CORS_PASSWORD", getCorsPassword())
+        }
+        debug {
+            buildConfigField("String", "CORS_ADDRESS", getCorsAddress())
+            buildConfigField("Integer", "CORS_PORT", getCorsPort())
+            buildConfigField("String", "CORS_MOUNT_POINT", getCorsMountPoint())
+            buildConfigField("String", "CORS_USERNAME", getCorsUsername())
+            buildConfigField("String", "CORS_PASSWORD", getCorsPassword())
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+
+    implementation 'com.google.android.material:material:1.3.0'
+
+    implementation 'androidx.core:core-ktx:1.3.2'
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+
+    implementation 'com.github.felHR85:UsbSerial:6.1.0'
+
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3-native-mt'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.4.3-native-mt'
+}
+
+
+def getCorsAddress() {
+    def properties = getCorsProperties()
+    return properties["CORS_ADDRESS"]
+}
+
+def getCorsPort() {
+    def properties = getCorsProperties()
+    return properties["CORS_PORT"]
+}
+
+def getCorsMountPoint() {
+    def properties = getCorsProperties()
+    return properties["CORS_MOUNT_POINT"]
+}
+
+def getCorsUsername() {
+    def properties = getCorsProperties()
+    return properties["CORS_USERNAME"]
+}
+
+def getCorsPassword() {
+    def properties = getCorsProperties()
+    return properties["CORS_PASSWORD"]
+}
+
+def getCorsProperties() {
+    def propertyFile = file("cors.properties")
+    def properties = new Properties()
+    properties.load(new FileInputStream(propertyFile))
+    return properties
+}
