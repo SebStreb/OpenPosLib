@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="positioning_library_name">Positioning Library</string>
+    <string name="positioning_library_active">Positioning service is active</string>
+    <string name="positioning_library_antenna_start_error">Unable to start connection with the antenna</string>
+    <string name="positioning_library_permission_error">Location permission not granted</string>
+    <string name="positioning_library_location_disabled">Device location disabled</string>
+    <string name="positioning_library_antenna_error">Connection error with the antenna</string>
+    <string name="positioning_library_cors_error">Connection error with the CORS server</string>
+</resources>
