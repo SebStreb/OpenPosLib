@@ -14,17 +14,14 @@ import androidx.core.app.ActivityCompat
 import be.ac.ucl.positioning_library.PositioningLibrary
 import be.ac.ucl.positioning_library.R
 import be.ac.ucl.positioning_library.managers.NMEADecoder
-import be.ac.ucl.positioning_library.objects.Position
 
 
 /**
  * Monitor updates of device position using android APIs in background.
  */
-internal class AndroidLocationService : Service() {
+internal class BasicService : Service() {
 
     companion object {
-        // identify service parameters
-        const val USE_GNSS = "use_gnss"
 
         // Identify service notification
         private const val FOREGROUND_ID = 421
@@ -40,30 +37,26 @@ internal class AndroidLocationService : Service() {
     // object to decode NMEA messages
     private var nmeaDecoder = NMEADecoder()
 
-    // true if using values decoded from NMEA messages, false otherwise
-    private var useGNSS = false
-
-    // last precision decoded with NMEA messages
-    private var lastPrecision = 0.0
+    // last accuracies received from android location object, horizontal then vertical
+    private var lastAccuracies = Pair(0f, 0f)
 
     // listener for new locations from android API
     private val locationListener = LocationListener { location ->
-        if (!useGNSS) sendBroadcast(Intent(PositioningLibrary.UPDATE).putExtra(PositioningLibrary.POSITION,
-            Position(location.latitude, location.longitude, location.altitude, location.accuracy * 100.0)
-        )) else Log.wtf("Android location", Position(location.latitude, location.longitude, location.altitude, location.accuracy * 100.0).toString())
-    } // TODO check discrepancy
+        lastAccuracies = Pair(location.accuracy, location.verticalAccuracyMeters)
+        Log.d("AndroidLocation", "hAcc: ${"%.2f m".format(location.accuracy)} - vAcc: ${"%.2f m".format(location.verticalAccuracyMeters)}")
+    }
 
     // listener for new NMEA messages from android API
     private val nmeaMessageListener = OnNmeaMessageListener { nmea, _ ->
-        val solution = nmeaDecoder.getSolution(nmea)
+        val solution = nmeaDecoder.getSolution(nmea.trim())
+        // update actual position
         when (solution.type) {
-            NMEADecoder.SolutionType.PRECISION -> lastPrecision = solution.precision!!
-            NMEADecoder.SolutionType.COORDINATES -> {
-                val (lat, lon, alt) = solution.coordinates!!
-                Log.wtf("NMEA location", Position(lat, lon, alt, lastPrecision).toString())
-                sendBroadcast(Intent(PositioningLibrary.UPDATE)
-                        .putExtra(PositioningLibrary.POSITION, Position(lat, lon, alt, lastPrecision)))
-            }
+            // android does not seem to send GST messages, get accuracy from location listener
+            NMEADecoder.SolutionType.POSITION -> sendBroadcast(Intent(PositioningLibrary.UPDATE)
+                    .putExtra(PositioningLibrary.POSITION, solution.position!!.apply {
+                        setHAcc(lastAccuracies.first)
+                        setVAcc(lastAccuracies.second)
+                    })) // send actual position and add accuracy
             else -> return@OnNmeaMessageListener
         }
     }
@@ -75,8 +68,7 @@ internal class AndroidLocationService : Service() {
         // start notification to keep service running in background even if app is not in foreground
         getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, getString(R.string.positioning_library_name), NotificationManager.IMPORTANCE_DEFAULT))
-        startForeground(
-            FOREGROUND_ID, Notification.Builder(this, CHANNEL_ID)
+        startForeground(FOREGROUND_ID, Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.positioning_library_name))
                 .setContentText(getString(R.string.positioning_library_active))
                 .setSmallIcon(R.drawable.positioning_library_icon)
@@ -87,9 +79,6 @@ internal class AndroidLocationService : Service() {
 
         // prepare delayed operations
         handler = Handler(mainLooper)
-
-        // get service argument
-        useGNSS = intent!!.getBooleanExtra(USE_GNSS, false)
 
         // check permission granted
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -105,7 +94,7 @@ internal class AndroidLocationService : Service() {
 
         // start listeners
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0f, locationListener)
-        if (useGNSS) locationManager.addNmeaListener(nmeaMessageListener, handler)
+        locationManager.addNmeaListener(nmeaMessageListener, handler)
 
         return START_STICKY
     }
@@ -117,7 +106,7 @@ internal class AndroidLocationService : Service() {
 
         // remove listeners
         locationManager.removeUpdates(locationListener)
-        if (useGNSS) locationManager.removeNmeaListener(nmeaMessageListener)
+        locationManager.removeNmeaListener(nmeaMessageListener)
 
         // remove notification
         stopForeground(true)

@@ -1,6 +1,10 @@
 package be.ac.ucl.positioning_library.managers
 
 import android.util.Log
+import be.ac.ucl.positioning_library.objects.Position
+import java.time.Instant
+import java.time.LocalDate
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 
@@ -8,6 +12,8 @@ import kotlin.math.sqrt
  * Decode NMEA messages.
  */
 internal class NMEADecoder {
+
+    companion object { private const val TAG = "NMEADecoder" }
 
     /**
      * Type of possible [Solution].
@@ -20,44 +26,25 @@ internal class NMEADecoder {
         INVALID,
 
         /**
-         * Decoded a new precision.
+         * Decoded new accuracies.
          */
-        PRECISION,
+        ACCURACIES,
 
         /**
-         * Decoded new coordinates.
+         * Decoded new position.
          */
-        COORDINATES,
+        POSITION,
 
     }
 
     /**
      * Solution received when decoding an NMEA.
      *
-     * If [type] is [SolutionType.PRECISION], [precision] is not null and contains new precision.
-     *
-     * If [type] is [SolutionType.COORDINATES], [coordinates] is not null and contains new coordinates.
-     *
-     * If [type] is [SolutionType.INVALID], [precision] and [coordinates] are null.
+     * @property type type of the solution decoded
+     * @property accuracies decoded accuracies, not null if [type] is [SolutionType.ACCURACIES]
+     * @property position decoded position, not null if [type] is [SolutionType.POSITION]
      */
-    data class Solution(
-
-        /**
-         * Type of the solution decoded.
-         */
-        val type: SolutionType,
-
-        /**
-         * Precision decoded, null if no precision was decoded.
-         */
-        val precision: Double? = null,
-
-        /**
-         * Coordinates decoded, null if no coordinates were decoded.
-         */
-        val coordinates: Triple<Double, Double, Double>? = null,
-
-        )
+    data class Solution(val type: SolutionType, val accuracies: Pair<Float, Float>? = null, val position: Position? = null)
 
 
     /**
@@ -95,11 +82,20 @@ internal class NMEADecoder {
     /**
      * Decode an NMEA message.
      *
-     * @param data the NMEA to decode
+     * @param data the NMEA to decode with checksum and without line ending
      * @return a [Solution] describing what was decoded
      */
     fun getSolution(data: String): Solution {
-        val nmea = data.split(",")
+        val sentence = data.drop(1).dropLast(3) // all between $ and *
+        val checksum = data.takeLast(2) // checksum of sentence
+
+        // FIXME PGLOR have no checksum ?!
+        if (!validateChecksum(sentence, checksum)) {
+            Log.d(TAG, "Wrong checksum: $data, expected ${computeChecksum(sentence)}")
+            return Solution(SolutionType.INVALID)
+        }
+
+        val nmea = sentence.split(",") // remove checksum and get fields
         return when { // check type of NMEA
             nmea[0].contains("GST") -> parseGST(nmea)
             nmea[0].contains("GGA") -> {
@@ -107,10 +103,11 @@ internal class NMEADecoder {
                 lastGGA = data
                 parseGGA(nmea)
             }
-            else -> {
-                Log.wtf("Discarded NMEA", nmea[0]) // TODO check android NMEA
+            nmea[0].contains("DTM") || nmea[0].contains("GNS") -> {
+                Log.wtf(TAG, "found some ${nmea[0]}")
                 Solution(SolutionType.INVALID)
-            } // no information to get from other NMEA
+            }
+            else -> Solution(SolutionType.INVALID) // no information to get from other NMEA
         }
     }
 
@@ -119,24 +116,27 @@ internal class NMEADecoder {
      * Decode a GST NMEA message.
      *
      * @param nmea the GST to decode
-     * @return a [Solution] with the decoded precision, or an [SolutionType.INVALID] solution if the GST is not valid
+     * @return a [Solution] with the decoded accuracy, or an [SolutionType.INVALID] solution if the GST is not valid
      */
     private fun parseGST(nmea: List<String>): Solution {
+        Log.d(TAG, nmea.joinToString(","))
+
         // check if GST is valid
-        if (nmea.size < 8 || !validate(nmea[6], 0) || !validate(nmea[7], 0)) {
-            Log.d("NMEADecoder", "GST: invalid (${nmea.joinToString(",")})")
+        if (nmea.size != 9 || !validate(nmea[6]) || !validate(nmea[7]) || !validate((nmea[8]))) {
+            Log.d(TAG, "invalid GST")
             return Solution(SolutionType.INVALID)
         }
 
-        // get precision from GST
-        val prec = sqrt((nmea[6].toDouble()*nmea[6].toDouble()) + (nmea[7].toDouble()*nmea[7].toDouble())) * 100
-        Log.d("NMEADecoder", "GST: ${"%.2f cm".format(prec)}")
-        return Solution(SolutionType.PRECISION, precision = prec)
+        // get accuracies from GST
+        val hAcc = sqrt(nmea[6].toDouble().pow(2) + nmea[7].toDouble().pow(2)).toFloat()
+        val vAcc = nmea[8].toFloat()
+
+        Log.d(TAG, "hAcc: ${"%.2f m".format(hAcc)}")
+        Log.d(TAG, "vAcc: ${"%.2f m".format(vAcc)}")
+
+        return Solution(SolutionType.ACCURACIES, accuracies = Pair(hAcc, vAcc))
     }
 
-    /**
-     * Decodes GGA to get update of coordinates.
-     */
     /**
      * Decode a GGA NMEA message.
      *
@@ -144,32 +144,56 @@ internal class NMEADecoder {
      * @return a [Solution] with the decoded coordinates, or an [SolutionType.INVALID] solution if the GGA is not valid
      */
     private fun parseGGA(nmea: List<String>): Solution {
+        Log.d(TAG, nmea.joinToString(","))
+
         // check if GGA is valid
-        if (nmea.size < 10 || !validate(nmea[2], 4) || nmea[3] !in listOf("N", "S") ||
-                !validate(nmea[4], 5) || nmea[5] !in listOf("E", "W") && !validate(nmea[9], 0)) {
-            Log.d("NMEADecoder", "GGA: invalid (${nmea.joinToString(",")})")
+        if (nmea.size < 13 || !validate(nmea[1]) ||
+                !validate(nmea[2]) || nmea[3] !in listOf("N", "S") ||
+                !validate(nmea[4]) || nmea[5] !in listOf("E", "W") ||
+                !validate(nmea[9]) || !validate(nmea[11])) {
+            Log.d(TAG, "invalid GGA")
             return Solution(SolutionType.INVALID)
         }
 
+        val dateTimestamp = LocalDate.now().toEpochDay() * 24*60*60*1000
+        val hourTimestamp = nmea[1].substring(0, 2).toLong() * 60*60*1000
+        val minuteTimestamp = nmea[1].substring(2, 4).toLong() * 60*1000
+        val secondTimestamp = nmea[1].substring(4, 6).toLong() * 1000
+        val millisecondTimestamp = nmea[1].substring(7).toLong()
+
         // get coordinates from GGA
+        val timestamp = dateTimestamp + hourTimestamp + minuteTimestamp + secondTimestamp + millisecondTimestamp
         val lat = dms2lla(nmea[2], nmea[3])
         val lon = dms2lla(nmea[4], nmea[5])
         val alt = nmea[9].toDouble()
-        Log.d("NMEADecoder", "GGA: ${"%.6f".format(lat)} - ${"%.6f".format(lon)} - ${"%2f m".format(alt)}")
-        return Solution(SolutionType.COORDINATES, coordinates = Triple(lat, lon, alt))
+        val offset = nmea[11].toDouble()
+
+        Log.d(TAG, "timestamp: ${Instant.ofEpochMilli(timestamp)}")
+        Log.d(TAG, "lat: ${"%.6f".format(lat)}")
+        Log.d(TAG, "lon: ${"%.6f".format(lon)}")
+        Log.d(TAG, "alt: ${"%.2f m".format(alt)}")
+        Log.d(TAG, "gHeight: ${"%.2f m".format(offset)}")
+
+        return Solution(SolutionType.POSITION, position = Position.fromGGA(timestamp, lat, lon, alt, offset))
     }
 
-    /**
-     * Check if an NMEA field represents a [Double] with an expected size.
-     *
-     * @param value the field to check
-     * @param minSize the expected size of the field, as a number of digits
-     * @return true if the field is valid, false otherwise
-     */
-    private fun validate(value: String, minSize: Int) = value.toDoubleOrNull() != null && value.length > minSize
+
+    private fun validateChecksum(sentence: String, checksum: String) = computeChecksum(sentence).equals(checksum, ignoreCase = true)
 
     /**
-     * Convert latitude and longitude from degree/minute/second form to decimal form.
+     * Check if an NMEA field represents a [Double].
+     *
+     * @param value the field to check
+     * @return true if the field is a double number, false otherwise
+     */
+    private fun validate(value: String) = value.toDoubleOrNull() != null
+
+
+    private fun computeChecksum(sentence: String) = sentence.fold(0) { acc, char -> acc xor char.toInt() }
+            .toString(16).padStart(2, '0')
+
+    /**
+     * Convert latitude and longitude from degree/minute/second string form to degrees in decimal form.
      *
      * @param value latitude or longitude to convert
      * @param hemisphere hemisphere of the latitude or longitude, as a single character string N, S, E, W

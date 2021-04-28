@@ -3,12 +3,14 @@ package be.ac.ucl.positioning_library.objects
 import android.hardware.usb.UsbDevice
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
+import be.ac.ucl.positioning_library.PositioningLibrary
 
 
 /**
  * Configuration for the use of an external antenna.
  *
- * @property antennaSize size of the antenna, in centimeters
+ * @property antenna USB device corresponding to a supported antenna (check [PositioningLibrary.isSupportedAntenna])
+ * @property antennaSize size of the antenna, in meters
  * @property baudRate baud rate of the serial connection with the antenna
  * @property dataBits number of data bits in the serial connection with the antenna [5-8]
  * @property stopBits number of stop bits in the serial connection with the antenna [1-3]
@@ -28,7 +30,7 @@ import kotlinx.parcelize.Parcelize
 @Parcelize
 data class AntennaConfig(
         val antenna: UsbDevice,
-        val antennaSize: Int,
+        val antennaSize: Double,
         val baudRate: Int = 38400,
         val dataBits: Int = 8,
         val stopBits: Int = 1,

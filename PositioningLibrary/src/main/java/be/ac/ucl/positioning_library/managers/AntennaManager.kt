@@ -69,8 +69,8 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
     // Actual status of the manager
     private var status = Status.STOP
 
-    // Last precision received from antenna, 0.0 is none
-    private var lastPrecision = 0.0
+    // Last accuracies received from antenna, first horizontal then vertical, 0 is none
+    private var lastAccuracies = Pair(0f, 0f)
 
     // Object used to decode NMEA messages
     private var nmeaDecoder = NMEADecoder()
@@ -145,9 +145,9 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
 
 
     /**
-     * Transmit CORRECTED corrections data to antenna.
+     * Transmit RTK corrections data to antenna.
      *
-     * @param data CORRECTED correction data sent by CORS server
+     * @param data RTK correction data sent by CORS server
      * @param len number of bytes of the data to send
      */
     fun sendCorrections(data: ByteArray, len: Int) {
@@ -170,13 +170,12 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
             // interpret NMEA
             val solution = nmeaDecoder.getSolution(nmea)
             when (solution.type) {
-                NMEADecoder.SolutionType.PRECISION -> lastPrecision = solution.precision!! // update actual precision
-                NMEADecoder.SolutionType.COORDINATES -> { // update actual position
-                    val (lat, lon, alt) = solution.coordinates!!
-                    // inform of new position
-                    // correct altitude with the size of the antenna
-                    listener.onPosition(Position(lat, lon, alt - (antennaConfig.antennaSize / 100.0), lastPrecision))
-                }
+                NMEADecoder.SolutionType.ACCURACIES -> lastAccuracies = solution.accuracies!! // update actual accuracy
+                NMEADecoder.SolutionType.POSITION -> listener.onPosition(solution.position!!.apply {
+                    adjustAntennaSize(antennaConfig.antennaSize)
+                    setHAcc(lastAccuracies.first)
+                    setVAcc(lastAccuracies.second)
+                }) // update actual position, correct with antenna size and last decoded accuracy
                 else -> continue
             }
         }

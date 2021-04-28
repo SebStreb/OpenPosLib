@@ -8,26 +8,26 @@ enum class PositioningMode {
     /**
      * Use the basic android location API.
      */
-    BASIC, // uses location manager
+    BASIC, // uses basic service
 
     /**
      * Use the raw GNSS capabilities of the device.
      */
-    INTERNAL, // uses gnss manager
+    INTERNAL, // uses internal service
 
     /**
      * Use the raw GNSS capabilities of the device, corrected with RTK from a CORS server.
      */
-    CORRECTED, // uses gnss manager & cors manager
+    INTERNAL_RTK, // uses internal service & cors manager
 
     /**
      * Use an external GNSS antenna.
      */
-    EXTERNAL, // uses antenna manager
+    EXTERNAL, // uses external service (antenna manager)
 
     /**
      * Use an external GNSS antenna, corrected with RTK from a CORS server.
      */
-    EXTERNAL_CORRECTED, // uses antenna manager & cors manager
+    EXTERNAL_RTK, // uses external service (antenna manager & cors manager)
 
 }

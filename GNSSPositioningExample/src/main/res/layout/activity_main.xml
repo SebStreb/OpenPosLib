@@ -87,8 +87,11 @@
         android:layout_height="8dp" />
 
     <RelativeLayout
-        android:layout_width="192dp"
-        android:layout_height="wrap_content">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -114,8 +117,11 @@
     </RelativeLayout>
 
     <RelativeLayout
-        android:layout_width="192dp"
-        android:layout_height="wrap_content">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -141,8 +147,45 @@
     </RelativeLayout>
 
     <RelativeLayout
-        android:layout_width="192dp"
-        android:layout_height="wrap_content">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/h_acc"
+
+            android:text="@string/horizontal_accuracy"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/h_acc"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+    <TextView
+        android:layout_width="0dp"
+        android:layout_height="8dp" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -168,21 +211,88 @@
     </RelativeLayout>
 
     <RelativeLayout
-        android:layout_width="192dp"
-        android:layout_height="wrap_content">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
 
             android:layout_alignParentStart="true"
-            android:layout_toStartOf="@id/precision"
+            android:layout_toStartOf="@id/height"
 
-            android:text="@string/precision"
+            android:text="@string/ellipsoid_height"
             android:textSize="8pt" />
 
         <TextView
-            android:id="@+id/precision"
+            android:id="@+id/height"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/v_acc"
+
+            android:text="@string/vertical_accuracy"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/v_acc"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentEnd="true"
+
+            android:text="@string/none"
+            android:textSize="8pt" />
+
+    </RelativeLayout>
+
+    <TextView
+        android:layout_width="0dp"
+        android:layout_height="8dp" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_alignParentStart="true"
+            android:layout_toStartOf="@id/time"
+
+            android:text="@string/time"
+            android:textSize="8pt" />
+
+        <TextView
+            android:id="@+id/time"
 
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

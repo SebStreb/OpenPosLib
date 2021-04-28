@@ -16,7 +16,7 @@ import be.ac.ucl.positioning_library.objects.Position
 /**
  * Monitor updates of device position using external antenna in the background.
  */
-internal class AntennaPositionService : Service() {
+internal class ExternalService : Service() {
 
     companion object {
         // Identify service parameter
@@ -51,8 +51,7 @@ internal class AntennaPositionService : Service() {
         // start notification to keep service running in background even if app is not in foreground
         getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, getString(R.string.positioning_library_name), NotificationManager.IMPORTANCE_DEFAULT))
-        startForeground(
-            FOREGROUND_ID, Notification.Builder(this, CHANNEL_ID)
+        startForeground(FOREGROUND_ID, Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.positioning_library_name))
                 .setContentText(getString(R.string.positioning_library_active))
                 .setSmallIcon(R.drawable.positioning_library_icon)

@@ -22,6 +22,10 @@ import be.ac.ucl.positioning_library.objects.AntennaConfig
 import be.ac.ucl.positioning_library.objects.CORSConfig
 import be.ac.ucl.positioning_library.objects.Position
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
 
 /**
  * Example of use of the positioning service with an external antenna and CORS corrections. Main steps are:
@@ -44,7 +48,7 @@ class MainActivity : AppCompatActivity() {
         private const val PERM_REQUEST = 419
 
         // list of modes requiring an external antenna
-        private val antennaServices = listOf(PositioningMode.EXTERNAL, PositioningMode.EXTERNAL_CORRECTED)
+        private val antennaServices = listOf(PositioningMode.EXTERNAL, PositioningMode.EXTERNAL_RTK)
     }
 
     // handle usb connection and permission
@@ -54,10 +58,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serviceMode: Spinner
     private lateinit var serviceStatus: TextView
     private lateinit var toggleService: Button
+
     private lateinit var latitude: TextView
     private lateinit var longitude: TextView
+    private lateinit var hAcc: TextView
+
     private lateinit var altitude: TextView
-    private lateinit var precision: TextView
+    private lateinit var height: TextView
+    private lateinit var vAcc: TextView
+
+    private lateinit var time: TextView
 
     // positioning library
     private var positioningLibrary = PositioningLibrary()
@@ -65,13 +75,21 @@ class MainActivity : AppCompatActivity() {
     // execution mode of the library
     private lateinit var mode: PositioningMode
 
+    private val modeNames = mapOf(
+            "Android API" to PositioningMode.BASIC,
+            "Internal antenna" to PositioningMode.INTERNAL,
+            "Internal antenna with RTK" to PositioningMode.INTERNAL_RTK,
+            "External antenna" to PositioningMode.EXTERNAL,
+            "External antenna with RTK" to PositioningMode.EXTERNAL_RTK,
+    )
+
     // configuration of the CORS server connection (check you cors.properties file)
     private val corsConfig = CORSConfig(
-        BuildConfig.CORS_ADDRESS,
-        BuildConfig.CORS_PORT,
-        BuildConfig.CORS_MOUNT_POINT,
-        BuildConfig.CORS_USERNAME,
-        BuildConfig.CORS_PASSWORD
+            BuildConfig.CORS_ADDRESS,
+            BuildConfig.CORS_PORT,
+            BuildConfig.CORS_MOUNT_POINT,
+            BuildConfig.CORS_USERNAME,
+            BuildConfig.CORS_PASSWORD,
     )
 
     // plugged antenna, null if unplugged
@@ -115,10 +133,16 @@ class MainActivity : AppCompatActivity() {
         serviceMode = findViewById(R.id.service_mode)
         serviceStatus = findViewById(R.id.service_status)
         toggleService = findViewById(R.id.toggle_service)
+
         latitude = findViewById(R.id.latitude)
         longitude = findViewById(R.id.longitude)
+        hAcc = findViewById(R.id.h_acc)
+
         altitude = findViewById(R.id.altitude)
-        precision = findViewById(R.id.precision)
+        height = findViewById(R.id.height)
+        vAcc = findViewById(R.id.v_acc)
+
+        time = findViewById(R.id.time)
 
         // listen for events
         registerReceiver(broadcastReceiver, IntentFilter().apply {
@@ -128,18 +152,18 @@ class MainActivity : AppCompatActivity() {
         })
 
         // set up mode selection spinner
-        serviceMode.adapter = ArrayAdapter(this, R.layout.spinner, PositioningMode.values()).apply {
+        serviceMode.adapter = ArrayAdapter(this, R.layout.spinner, modeNames.keys.toList()).apply {
             setDropDownViewResource(R.layout.spinner_dropdown)
         }
-        serviceMode.onItemSelectedListener = object :  AdapterView.OnItemSelectedListener {
+        serviceMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                mode = serviceMode.selectedItem as PositioningMode
+                mode = modeNames[serviceMode.selectedItem as String]!!
                 if (positioningLibrary.running) {
                     stopService(getString(R.string.change_exec_mode))
                     startService()
                 }
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) = positioningLibrary.setBasicMode()
+            override fun onNothingSelected(parent: AdapterView<*>?) { mode = PositioningMode.BASIC }
         }
 
         // set up start/stop button
@@ -177,10 +201,10 @@ class MainActivity : AppCompatActivity() {
         // configure positioning library
         when (mode) {
             PositioningMode.BASIC -> positioningLibrary.setBasicMode()
-            PositioningMode.INTERNAL ->  positioningLibrary.setInternalMode()
-            PositioningMode.CORRECTED -> positioningLibrary.setCorrectedMode(corsConfig)
-            PositioningMode.EXTERNAL -> positioningLibrary.setExternalMode(AntennaConfig(antenna!!, 180))
-            PositioningMode.EXTERNAL_CORRECTED -> positioningLibrary.setExternalCorrectedMode(AntennaConfig(antenna!!, 180), corsConfig)
+            PositioningMode.INTERNAL -> positioningLibrary.setInternalMode()
+            PositioningMode.INTERNAL_RTK -> positioningLibrary.setCorrectedMode(corsConfig)
+            PositioningMode.EXTERNAL -> positioningLibrary.setExternalMode(AntennaConfig(antenna!!, 1.8))
+            PositioningMode.EXTERNAL_RTK -> positioningLibrary.setExternalCorrectedMode(AntennaConfig(antenna!!, 1.8), corsConfig)
         }
 
         // start positioning library
@@ -221,10 +245,15 @@ class MainActivity : AppCompatActivity() {
      * @param position the new measured position
      */
     private fun updatePosition(position: Position) {
-        latitude.text = getString(R.string.lat_lon, position.lat)
-        longitude.text = getString(R.string.lat_lon, position.lon)
-        altitude.text = getString(R.string.alt, position.alt)
-        precision.text = getString(R.string.prec, position.prec)
+        latitude.text = getString(R.string.lat_lon, position.latitude)
+        longitude.text = getString(R.string.lat_lon, position.longitude)
+        hAcc.text = getString(R.string.meters, position.horizontalAccuracy)
+
+        altitude.text = getString(R.string.meters, position.altitude)
+        height.text = getString(R.string.meters, position.ellipsoidHeight)
+        vAcc.text = getString(R.string.meters, position.verticalAccuracy)
+
+        time.text = Instant.ofEpochMilli(position.timestamp).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm:ss O"))
     }
 
     /**

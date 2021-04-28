@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <public /> <!-- makes all other resources private -->
+    <!-- makes all other resources in the library private -->
+    <public name="positioning_library_icon" type="drawable" />
 </resources>

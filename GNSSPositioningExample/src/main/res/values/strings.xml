@@ -14,10 +14,12 @@
     <string name="latitude">Latitude</string>
     <string name="longitude">Longitude</string>
     <string name="altitude">Altitude</string>
-    <string name="precision">Precision</string>
+    <string name="horizontal_accuracy">Horizontal Accuracy</string>
+    <string name="vertical_accuracy">Vertical Accuracy</string>
     <string name="lat_lon">%.6f</string>
-    <string name="alt">%.2f m</string>
-    <string name="prec">%.2f cm</string>
+    <string name="meters">%.2f m</string>
     <string name="positioning_service_mode">Positioning Service Mode</string>
     <string name="change_exec_mode">Changing execution mode</string>
+    <string name="time">Time</string>
+    <string name="ellipsoid_height">Ellipsoid Height</string>
 </resources>

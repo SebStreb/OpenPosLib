@@ -8,8 +8,8 @@
 
     <application>
 
-        <service android:name="be.ac.ucl.positioning_library.services.AndroidLocationService" />
-        <service android:name="be.ac.ucl.positioning_library.services.AntennaPositionService"/>
+        <service android:name="be.ac.ucl.positioning_library.services.BasicService" />
+        <service android:name="be.ac.ucl.positioning_library.services.ExternalService"/>
 
     </application>
 

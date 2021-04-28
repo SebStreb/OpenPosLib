@@ -5,7 +5,7 @@ import kotlinx.parcelize.Parcelize
 
 
 /**
- * Configuration of a CORS connection for CORRECTED corrections.
+ * Configuration of a CORS connection for RTK corrections.
  *
  * @property address URL or IP of the CORS server
  * @property port port of the CORS server

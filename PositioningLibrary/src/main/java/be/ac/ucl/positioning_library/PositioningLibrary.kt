@@ -5,10 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
+import android.util.Log
 import be.ac.ucl.positioning_library.objects.AntennaConfig
 import be.ac.ucl.positioning_library.objects.CORSConfig
-import be.ac.ucl.positioning_library.services.AndroidLocationService
-import be.ac.ucl.positioning_library.services.AntennaPositionService
+import be.ac.ucl.positioning_library.services.BasicService
+import be.ac.ucl.positioning_library.services.ExternalService
 import com.felhr.usbserial.UsbSerialDevice
 
 
@@ -26,6 +27,12 @@ class PositioningLibrary {
         const val ERROR = "be.ac.ucl.gnsspositioning.ERROR"
         const val MESSAGE = "message"
 
+        /**
+         * Check that a USB device is supported by the library as an antenna.
+         *
+         * @param usbDevice the USB device to check
+         * @return true if the device is a supported antenna, false otherwise
+         */
         fun isSupportedAntenna(usbDevice: UsbDevice) = UsbSerialDevice.isSupported(usbDevice)
     }
 
@@ -74,11 +81,11 @@ class PositioningLibrary {
     }
 
     /**
-     * Set the execution mode to [PositioningMode.CORRECTED].
+     * Set the execution mode to [PositioningMode.INTERNAL_RTK].
      * @param corsConfig configuration of the cors server connection
      */
     fun setCorrectedMode(corsConfig: CORSConfig) {
-        executionMode = PositioningMode.CORRECTED
+        executionMode = PositioningMode.INTERNAL_RTK
         this.corsConfig = corsConfig
     }
 
@@ -93,13 +100,13 @@ class PositioningLibrary {
     }
 
     /**
-     * Set the execution mode to [PositioningMode.EXTERNAL_CORRECTED].
+     * Set the execution mode to [PositioningMode.EXTERNAL_RTK].
      *
      * @param antennaConfig configuration of the external GNSS antenna
      * @param corsConfig configuration of the cors server connection
      */
     fun setExternalCorrectedMode(antennaConfig: AntennaConfig, corsConfig: CORSConfig) {
-        executionMode = PositioningMode.EXTERNAL_CORRECTED
+        executionMode = PositioningMode.EXTERNAL_RTK
         this.antennaConfig = antennaConfig
         this.corsConfig = corsConfig
     }
@@ -121,17 +128,17 @@ class PositioningLibrary {
         // save listener and put configuration objects
         listener = positioningListener
         intent = when (executionMode) {
-            PositioningMode.BASIC -> Intent(context, AndroidLocationService::class.java)
-            PositioningMode.INTERNAL -> Intent(context, AndroidLocationService::class.java)
-                    .putExtra(AndroidLocationService.USE_GNSS, true)
-            PositioningMode.CORRECTED -> TODO()
-            PositioningMode.EXTERNAL -> Intent(context, AntennaPositionService::class.java)
-                    .putExtra(AntennaPositionService.ANTENNA_CONFIG, antennaConfig)
-            PositioningMode.EXTERNAL_CORRECTED -> Intent(context, AntennaPositionService::class.java)
-                    .putExtra(AntennaPositionService.ANTENNA_CONFIG, antennaConfig)
-                    .putExtra(AntennaPositionService.CORS_CONFIG, corsConfig)
+            PositioningMode.BASIC -> Intent(context, BasicService::class.java)
+            PositioningMode.INTERNAL -> TODO("RTKLIB")
+            PositioningMode.INTERNAL_RTK -> TODO("RTKLIB+CORS")
+            PositioningMode.EXTERNAL -> Intent(context, ExternalService::class.java)
+                    .putExtra(ExternalService.ANTENNA_CONFIG, antennaConfig)
+            PositioningMode.EXTERNAL_RTK -> Intent(context, ExternalService::class.java)
+                    .putExtra(ExternalService.ANTENNA_CONFIG, antennaConfig)
+                    .putExtra(ExternalService.CORS_CONFIG, corsConfig)
         }
 
+        Log.d("PositioningLibrary", "Starting in mode $executionMode")
         // start service
         context.startForegroundService(intent)
 
