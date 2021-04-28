@@ -7,4 +7,6 @@
     <string name="positioning_library_location_disabled">Device location disabled</string>
     <string name="positioning_library_antenna_error">Connection error with the antenna</string>
     <string name="positioning_library_cors_error">Connection error with the CORS server</string>
+    <string name="positioning_library_not_plugged_in">Antenna not plugged in</string>
+    <string name="positioning_library_unplugged">Antenna unplugged</string>
 </resources>

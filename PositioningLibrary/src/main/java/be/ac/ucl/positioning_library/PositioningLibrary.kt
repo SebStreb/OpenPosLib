@@ -1,10 +1,12 @@
 package be.ac.ucl.positioning_library
 
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.util.Log
 import be.ac.ucl.positioning_library.objects.AntennaConfig
 import be.ac.ucl.positioning_library.objects.CORSConfig
@@ -16,9 +18,11 @@ import com.felhr.usbserial.UsbSerialDevice
 /**
  * Entry point of the library, configure, start and stop services to get position.
  */
-class PositioningLibrary {
+class PositioningLibrary(context: Context) {
 
     companion object {
+        private const val TAG = "PositioningLibrary"
+
         // identify position update
         const val UPDATE = "be.ac.ucl.gnsspositioning.UPDATE"
         const val POSITION = "position"
@@ -27,13 +31,13 @@ class PositioningLibrary {
         const val ERROR = "be.ac.ucl.gnsspositioning.ERROR"
         const val MESSAGE = "message"
 
-        /**
-         * Check that a USB device is supported by the library as an antenna.
-         *
-         * @param usbDevice the USB device to check
-         * @return true if the device is a supported antenna, false otherwise
-         */
-        fun isSupportedAntenna(usbDevice: UsbDevice) = UsbSerialDevice.isSupported(usbDevice)
+        // identify USB events
+        private const val USB_ATTACHED = "android.hardware.usb.action.USB_DEVICE_ATTACHED"
+        private const val USB_DETACHED = "android.hardware.usb.action.USB_DEVICE_DETACHED"
+        private const val USB_PERMISSION = "be.ac.ucl.gnss_positioning_example.USB_PERMISSION"
+
+        // list of modes requiring an external antenna
+        private val antennaServices = listOf(PositioningMode.EXTERNAL, PositioningMode.EXTERNAL_RTK)
     }
 
     // execution mode of the service
@@ -47,13 +51,18 @@ class PositioningLibrary {
     private var listener: PositioningListener? = null
     private var intent: Intent? = null
 
+    // handle usb connection and permission
+    private var usbManager = context.getSystemService(UsbManager::class.java)
+    // plugged antenna, null if unplugged
+    private var usbDevice: UsbDevice? = null
+
     /**
      * True if the positioning service running, false otherwise.
      */
     var running = false
 
     // react to service events
-    private val broadcastReceiver = object : BroadcastReceiver() {
+    private val serviceBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 // new position measured
@@ -67,18 +76,40 @@ class PositioningLibrary {
         }
     }
 
+    private val usbBroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                USB_ATTACHED -> { // usb device plugged in
+                    usbManager.deviceList.values.firstOrNull(UsbSerialDevice::isSupported)?.let { device ->
+                        requestUserPermission(context, device) // request permission to use if it is an antenna
+                    }
+                }
+                USB_DETACHED -> { // usb device unplugged
+                    usbDevice = null
+                    if (running && executionMode in antennaServices) {
+                        listener?.onError(context.getString(R.string.positioning_library_unplugged))
+                        stopService(context)
+                    }
+                }
+                USB_PERMISSION -> { // response to permission request
+                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                    if (granted) usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)!!
+                }
+            }
+        }
+    }
+
+
+
     /**
      * Set the execution mode to [PositioningMode.BASIC].
      */
-    fun setBasicMode() { executionMode = PositioningMode.BASIC
-    }
+    fun setBasicMode() { executionMode = PositioningMode.BASIC }
 
     /**
      * Set the execution mode to [PositioningMode.INTERNAL].
      */
-    fun setInternalMode() {
-        executionMode = PositioningMode.INTERNAL
-    }
+    fun setInternalMode() { executionMode = PositioningMode.INTERNAL }
 
     /**
      * Set the execution mode to [PositioningMode.INTERNAL_RTK].
@@ -113,14 +144,50 @@ class PositioningLibrary {
 
 
     /**
+     * Start listening for USB events to detect an antenna plugged in through USB.
+     *
+     * @param context the context of the application
+     */
+    fun startUSBAntennaListener(context: Context) {
+        // listen for events
+        context.registerReceiver(usbBroadcastReceiver, IntentFilter().apply {
+            addAction(USB_ATTACHED)
+            addAction(USB_DETACHED)
+            addAction(USB_PERMISSION)
+        })
+
+        // request permission if antenna already plugged in
+        usbManager.deviceList.values.firstOrNull(UsbSerialDevice::isSupported)?.let { requestUserPermission(context, it) }
+    }
+
+    /**
+     * Stop listening for USB events and discard any plugged antenna.
+     *
+     * @param context the context of the application
+     */
+    fun stopUSBAntennaListener(context: Context) {
+        context.unregisterReceiver(usbBroadcastReceiver)
+        usbDevice = null
+    }
+
+    /**
+     * Ask the user the permission tu use the antenna USB device.
+     *
+     * @param device the antenna USB device
+     */
+    private fun requestUserPermission(context: Context, device: UsbDevice) =
+            usbManager.requestPermission(device, PendingIntent.getBroadcast(context, 0, Intent(USB_PERMISSION), 0))
+
+
+    /**
      * Start the positioning service in the configured execution mode.
      *
-     * @param context the context in which the service is running
+     * @param context the context of the application
      * @param positioningListener definition of callbacks for the service
      */
     fun startService(context: Context, positioningListener: PositioningListener) {
         // listen for service events
-        context.registerReceiver(broadcastReceiver, IntentFilter().apply {
+        context.registerReceiver(serviceBroadcastReceiver, IntentFilter().apply {
             addAction(UPDATE)
             addAction(ERROR)
         })
@@ -132,13 +199,15 @@ class PositioningLibrary {
             PositioningMode.INTERNAL -> TODO("RTKLIB")
             PositioningMode.INTERNAL_RTK -> TODO("RTKLIB+CORS")
             PositioningMode.EXTERNAL -> Intent(context, ExternalService::class.java)
+                    .putExtra(ExternalService.ANTENNA, usbDevice) // may be null if not plugged in, checked in service
                     .putExtra(ExternalService.ANTENNA_CONFIG, antennaConfig)
             PositioningMode.EXTERNAL_RTK -> Intent(context, ExternalService::class.java)
+                    .putExtra(ExternalService.ANTENNA, usbDevice)
                     .putExtra(ExternalService.ANTENNA_CONFIG, antennaConfig)
                     .putExtra(ExternalService.CORS_CONFIG, corsConfig)
         }
 
-        Log.d("PositioningLibrary", "Starting in mode $executionMode")
+        Log.d(TAG, "Starting in mode $executionMode")
         // start service
         context.startForegroundService(intent)
 
@@ -148,14 +217,15 @@ class PositioningLibrary {
     /**
      * Stop the positioning service.
      *
-     * @param context the context in which the service was running.
+     * @param context the context of the application
      */
     fun stopService(context: Context) {
-        context.unregisterReceiver(broadcastReceiver)
+        context.unregisterReceiver(serviceBroadcastReceiver)
         context.stopService(intent)
         intent = null
         listener = null
         running = false
+        Log.d(TAG, "Stopping service")
     }
 
 }

@@ -9,7 +9,6 @@ import be.ac.ucl.positioning_library.PositioningLibrary
 /**
  * Configuration for the use of an external antenna.
  *
- * @property antenna USB device corresponding to a supported antenna (check [PositioningLibrary.isSupportedAntenna])
  * @property antennaSize size of the antenna, in meters
  * @property baudRate baud rate of the serial connection with the antenna
  * @property dataBits number of data bits in the serial connection with the antenna [5-8]
@@ -29,7 +28,6 @@ import be.ac.ucl.positioning_library.PositioningLibrary
  */
 @Parcelize
 data class AntennaConfig(
-        val antenna: UsbDevice,
         val antennaSize: Double,
         val baudRate: Int = 38400,
         val dataBits: Int = 8,

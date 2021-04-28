@@ -2,6 +2,7 @@ package be.ac.ucl.positioning_library.services
 
 import android.app.*
 import android.content.Intent
+import android.hardware.usb.UsbDevice
 import android.os.Handler
 import android.os.IBinder
 import be.ac.ucl.positioning_library.PositioningLibrary
@@ -20,6 +21,7 @@ internal class ExternalService : Service() {
 
     companion object {
         // Identify service parameter
+        const val ANTENNA = "antenna"
         const val ANTENNA_CONFIG = "antenna_config"
         const val CORS_CONFIG = "cors_config"
 
@@ -61,7 +63,8 @@ internal class ExternalService : Service() {
         handler = Handler(mainLooper)
 
         // retrieve service parameters
-        val antennaConfig = intent!!.getParcelableExtra<AntennaConfig>(ANTENNA_CONFIG)!!
+        val usbDevice = intent!!.getParcelableExtra<UsbDevice>(ANTENNA)
+        val antennaConfig = intent.getParcelableExtra<AntennaConfig>(ANTENNA_CONFIG)!!
         val corsConfig = intent.getParcelableExtra<CORSConfig>(CORS_CONFIG) // null if no cors
 
         corsCorrections = corsConfig != null
@@ -86,9 +89,17 @@ internal class ExternalService : Service() {
             override fun onStop() = error(getString(R.string.positioning_library_cors_error)) // stop service in cas of cors error
         })
 
+        // check antenna connected
+        if (usbDevice == null) {
+            error(getString(R.string.positioning_library_not_plugged_in))
+            return START_STICKY
+        }
 
         // start connection with antenna
-        if (!antennaManager.connectAntenna(this)) error(getString(R.string.positioning_library_antenna_start_error))
+        if (!antennaManager.connectAntenna(this, usbDevice)) {
+            error(getString(R.string.positioning_library_antenna_start_error))
+            return START_STICKY
+        }
 
         start()
 

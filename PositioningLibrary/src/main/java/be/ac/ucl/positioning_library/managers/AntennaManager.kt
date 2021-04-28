@@ -1,6 +1,7 @@
 package be.ac.ucl.positioning_library.managers
 
 import android.content.Context
+import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import be.ac.ucl.positioning_library.objects.AntennaConfig
 import be.ac.ucl.positioning_library.objects.Position
@@ -102,13 +103,13 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
      * Status is [Status.CONNECTED], data exchange not started yet.
      *
      * @param context the context of the android app, to retrieve android USB system service
+     * @param usbDevice the USB device to use as antenna
      * @return true if connection worked, false otherwise
      */
-    fun connectAntenna(context: Context): Boolean {
+    fun connectAntenna(context: Context, usbDevice: UsbDevice): Boolean {
         // open antenna as device connected through serial port
         val usbManager = context.getSystemService(UsbManager::class.java)
-        antenna = UsbSerialDevice.createUsbSerialDevice(antennaConfig.antenna,
-                usbManager.openDevice(antennaConfig.antenna))
+        antenna = UsbSerialDevice.createUsbSerialDevice(usbDevice, usbManager.openDevice(usbDevice))
         if (!antenna!!.syncOpen()) return false
 
         // set settings of the serial connection

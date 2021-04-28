@@ -1,14 +1,7 @@
 package be.ac.ucl.gnss_positioning_example
 
 import android.Manifest
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
@@ -39,20 +32,10 @@ import java.time.format.DateTimeFormatter
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        // identify USB events
-        private const val USB_ATTACHED = "android.hardware.usb.action.USB_DEVICE_ATTACHED"
-        private const val USB_DETACHED = "android.hardware.usb.action.USB_DEVICE_DETACHED"
-        private const val USB_PERMISSION = "be.ac.ucl.gnss_positioning_example.USB_PERMISSION"
-
         // identify permission events
         private const val PERM_REQUEST = 419
-
-        // list of modes requiring an external antenna
-        private val antennaServices = listOf(PositioningMode.EXTERNAL, PositioningMode.EXTERNAL_RTK)
     }
 
-    // handle usb connection and permission
-    private lateinit var usbManager: UsbManager
 
     // UI elements
     private lateinit var serviceMode: Spinner
@@ -69,8 +52,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var time: TextView
 
+
     // positioning library
-    private var positioningLibrary = PositioningLibrary()
+    private lateinit var positioningLibrary: PositioningLibrary
 
     // execution mode of the library
     private lateinit var mode: PositioningMode
@@ -92,30 +76,6 @@ class MainActivity : AppCompatActivity() {
             BuildConfig.CORS_PASSWORD,
     )
 
-    // plugged antenna, null if unplugged
-    private var antenna: UsbDevice? = null
-
-    // react to events
-    private val broadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                USB_ATTACHED -> { // usb device plugged in
-                    usbManager.deviceList.values.firstOrNull(PositioningLibrary::isSupportedAntenna)?.let { device ->
-                        requestUserPermission(device) // request permission to use if it is an antenna
-                    }
-                }
-                USB_DETACHED -> { // usb device unplugged
-                    antenna = null
-                    if (positioningLibrary.running && mode in antennaServices) stopService(getString(R.string.unplugged))
-                }
-                USB_PERMISSION -> { // response to permission request
-                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                    if (!granted) return updateServiceStatus(false, getString(R.string.perm_refused))
-                    antenna = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)!!
-                }
-            }
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,30 +86,20 @@ class MainActivity : AppCompatActivity() {
         val logcatFile = File(filesDir, "$timestamp-logcat.log").apply { createNewFile() }
         Runtime.getRuntime().exec("logcat -f ${logcatFile.path}")
 
-        // get usb manager
-        usbManager = getSystemService(UsbManager::class.java)
-
         // get UI elements
         serviceMode = findViewById(R.id.service_mode)
         serviceStatus = findViewById(R.id.service_status)
         toggleService = findViewById(R.id.toggle_service)
-
         latitude = findViewById(R.id.latitude)
         longitude = findViewById(R.id.longitude)
         hAcc = findViewById(R.id.h_acc)
-
         altitude = findViewById(R.id.altitude)
         height = findViewById(R.id.height)
         vAcc = findViewById(R.id.v_acc)
-
         time = findViewById(R.id.time)
 
-        // listen for events
-        registerReceiver(broadcastReceiver, IntentFilter().apply {
-            addAction(USB_ATTACHED)
-            addAction(USB_DETACHED)
-            addAction(USB_PERMISSION)
-        })
+        // set up positioning library
+        positioningLibrary = PositioningLibrary(this)
 
         // set up mode selection spinner
         serviceMode.adapter = ArrayAdapter(this, R.layout.spinner, modeNames.keys.toList()).apply {
@@ -169,24 +119,17 @@ class MainActivity : AppCompatActivity() {
         // set up start/stop button
         toggleService.setOnClickListener { if (positioningLibrary.running) stopService(getString(R.string.stopped)) else startService() }
 
-        // request permission if antenna already plugged in
-        usbManager.deviceList.values.firstOrNull(PositioningLibrary::isSupportedAntenna)?.let { requestUserPermission(it) }
+        // start listening for USB device
+        positioningLibrary.startUSBAntennaListener(this)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        antenna = null
-        unregisterReceiver(broadcastReceiver)
+        positioningLibrary.stopUSBAntennaListener(this)
         if (positioningLibrary.running) stopService(getString(R.string.app_closed))
     }
 
-    /**
-     * Ask the user the permission tu use the antenna USB device.
-     *
-     * @param device the antenna USB device
-     */
-    private fun requestUserPermission(device: UsbDevice) =
-        usbManager.requestPermission(device, PendingIntent.getBroadcast(this, 0, Intent(USB_PERMISSION), 0))
+
 
     /**
      * Start the positioning service.
@@ -195,16 +138,13 @@ class MainActivity : AppCompatActivity() {
         // request permissions if necessary
         requestPermissionIfNecessary()
 
-        // check if antenna is needed and connected
-        if (mode in antennaServices && antenna == null) return updateServiceStatus(false, getString(R.string.not_plugged_in))
-
         // configure positioning library
         when (mode) {
             PositioningMode.BASIC -> positioningLibrary.setBasicMode()
             PositioningMode.INTERNAL -> positioningLibrary.setInternalMode()
             PositioningMode.INTERNAL_RTK -> positioningLibrary.setCorrectedMode(corsConfig)
-            PositioningMode.EXTERNAL -> positioningLibrary.setExternalMode(AntennaConfig(antenna!!, 1.8))
-            PositioningMode.EXTERNAL_RTK -> positioningLibrary.setExternalCorrectedMode(AntennaConfig(antenna!!, 1.8), corsConfig)
+            PositioningMode.EXTERNAL -> positioningLibrary.setExternalMode(AntennaConfig(1.8))
+            PositioningMode.EXTERNAL_RTK -> positioningLibrary.setExternalCorrectedMode(AntennaConfig(1.8), corsConfig)
         }
 
         // start positioning library
