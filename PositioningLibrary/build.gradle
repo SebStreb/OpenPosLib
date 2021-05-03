@@ -42,4 +42,13 @@ dependencies {
     implementation 'com.github.felHR85:UsbSerial:6.1.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3-native-mt'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.4.3-native-mt'
+
+    implementation 'com.programmerare.crs-transformation:crs-transformation-adapter-core:1.1.1'
+    implementation "com.programmerare.crs-transformation:crs-transformation-adapter-impl-proj4j:1.1.1"
+    implementation "com.programmerare.crs-transformation:crs-transformation-adapter-impl-proj4jlocationtech:1.1.1"
+    implementation "com.programmerare.crs-transformation:crs-transformation-adapter-impl-orbisgis:1.1.1"
+    implementation "com.programmerare.crs-transformation:crs-transformation-adapter-impl-nga:1.1.1"
+    // implementation "com.programmerare.crs-transformation:crs-transformation-adapter-impl-geotools:1.1.1" // TODO conflict between javaee & sun javax mail
+    implementation "com.programmerare.crs-transformation:crs-transformation-adapter-impl-goober:1.1.1"
+    implementation "com.programmerare.crs-transformation:crs-transformation-constants:9.8.9"
 }

@@ -22,7 +22,6 @@ import be.ac.ucl.positioning_library.managers.NMEADecoder
 internal class BasicService : Service() {
 
     companion object {
-
         // Identify service notification
         private const val FOREGROUND_ID = 421
         private const val CHANNEL_ID = "be.ac.ucl.positioning_library.ANDROID_LOCATION_SERVICE"

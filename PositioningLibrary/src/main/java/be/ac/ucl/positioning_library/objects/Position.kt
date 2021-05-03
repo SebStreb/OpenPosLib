@@ -3,6 +3,10 @@ package be.ac.ucl.positioning_library.objects
 import android.location.Location
 import android.location.LocationManager
 import android.os.Parcelable
+import android.util.Log
+import com.programmerare.crsConstants.constantsByAreaNameNumber.v9_8_9.EpsgNumber
+import com.programmerare.crsTransformations.compositeTransformations.CrsTransformationAdapterCompositeFactory.createCrsTransformationMedian
+import com.programmerare.crsTransformations.coordinate.latLon
 import kotlinx.parcelize.Parcelize
 
 
@@ -39,7 +43,7 @@ data class Position internal constructor(
      */
     val altitude get() = alt
     /**
-     * Removes [antennaSize] from [altitude] to correct actual value.
+     * Subtract [antennaSize] from [altitude] to correct actual value.
      */
     internal fun adjustAntennaSize(antennaSize: Double) { alt -= antennaSize }
 
@@ -60,7 +64,7 @@ data class Position internal constructor(
      */
     val horizontalAccuracy get() = hAcc
     /**
-     * Sets [horizontalAccuracy] when it is available.
+     * Change [horizontalAccuracy] value when it is available.
      */
     internal fun setHAcc(acc: Float) { hAcc = acc }
 
@@ -69,7 +73,7 @@ data class Position internal constructor(
      */
     val verticalAccuracy get() = vAcc
     /**
-     * Sets [verticalAccuracy] when it is available.
+     * Change [verticalAccuracy] value when it is available.
      */
     internal fun setVAcc(acc: Float) { vAcc = acc }
 
@@ -95,7 +99,31 @@ data class Position internal constructor(
     }
 
 
-    // TODO conversion methods
+    /**
+     * Get a projection of this [Position] on a different Coordinate Reference System (CRS).
+     *
+     * @param epsgNumber the EPSG number of the target CRS (see [https://epsg.org] for references, or use one of [EpsgNumber] constants)
+     * @return the coordinates in the target CRS, first along the X/Easting/longitude axis and second along the Y/Northing/latitude axis, or null if not transformation could be found to that CRS
+     */
+    fun projectTo(epsgNumber: Int): Pair<Double, Double>? {
+        val before = toCrsCoordinate()
+        if (epsgNumber == EpsgNumber.WORLD__WGS_84__4326) return Pair(before.getX(), before.getY())
+
+        val after = createCrsTransformationMedian().transform(before, epsgNumber)
+        if (!after.isSuccess || !after.isReliable(4, 0.01)) {
+            Log.wtf("Transform", "not working: $after")
+            return null
+        }
+
+        return Pair(after.outputCoordinate.getX(), after.outputCoordinate.getY())
+    }
+    /**
+     * Get a CRS Coordinate from transformation library corresponding to this [Position] in WGS 84.
+     *
+     * @return the corresponding crs coordinate
+     */
+    private fun toCrsCoordinate() = latLon(latitude, longitude, EpsgNumber.WORLD__WGS_84__4326)
+
 
 
     companion object {
@@ -123,7 +151,7 @@ data class Position internal constructor(
          * @return the corresponding position object
          */
         fun fromWGS84(lat: Double, lon: Double, alt: Double, diff: Double, hAcc: Float, vAcc: Float, time: Long) =
-                Position( lat, lon, alt, diff, hAcc, vAcc, time)
+                Position(lat, lon, alt, diff, hAcc, vAcc, time)
 
         /**
          * Create a [Position] object from coordinates retrieved in an NMEA GGA message, in WGS84 datum.
