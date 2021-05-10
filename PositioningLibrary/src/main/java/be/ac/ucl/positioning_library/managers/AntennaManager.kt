@@ -70,11 +70,11 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
     // Actual status of the manager
     private var status = Status.STOP
 
-    // Last accuracies received from antenna, first horizontal then vertical, 0 is none
-    private var lastAccuracies = Pair(0f, 0f)
-
     // Object used to decode NMEA messages
-    private var nmeaDecoder = NMEADecoder()
+    private var nmeaDecoder = NMEADecoder { position ->
+        position.adjustAntennaSize(antennaConfig.antennaSize)
+        listener.onPosition(position)
+    }
 
     /**
      * GGA NMEA message describing the last position.
@@ -167,19 +167,7 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
      */
     private fun updatePosition(data: String) {
         // retrieve NMEAs from antenna data
-        for (nmea in nmeaDecoder.getNMEAMessages(data)) {
-            // interpret NMEA
-            val solution = nmeaDecoder.getSolution(nmea)
-            when (solution.type) {
-                NMEADecoder.SolutionType.ACCURACIES -> lastAccuracies = solution.accuracies!! // update actual accuracy
-                NMEADecoder.SolutionType.POSITION -> listener.onPosition(solution.position!!.apply {
-                    adjustAntennaSize(antennaConfig.antennaSize)
-                    setHAcc(lastAccuracies.first)
-                    setVAcc(lastAccuracies.second)
-                }) // update actual position, correct with antenna size and last decoded accuracy
-                else -> continue
-            }
-        }
+        for (nmea in nmeaDecoder.getNMEAMessages(data)) nmeaDecoder.decode(nmea)
     }
 
 }

@@ -34,31 +34,18 @@ internal class BasicService : Service() {
     private lateinit var handler: Handler
 
     // object to decode NMEA messages
-    private var nmeaDecoder = NMEADecoder()
-
-    // last accuracies received from android location object, horizontal then vertical
-    private var lastAccuracies = Pair(0f, 0f)
+    private var nmeaDecoder = NMEADecoder { position ->
+        sendBroadcast(Intent(PositioningLibrary.UPDATE).putExtra(PositioningLibrary.POSITION, position))
+    }
 
     // listener for new locations from android API
     private val locationListener = LocationListener { location ->
-        lastAccuracies = Pair(location.accuracy, location.verticalAccuracyMeters)
+        nmeaDecoder.setAccuraciesFromAndroidAPI(location.accuracy.toDouble(), location.verticalAccuracyMeters.toDouble())
         Log.d("AndroidLocation", "hAcc: ${"%.2f m".format(location.accuracy)} - vAcc: ${"%.2f m".format(location.verticalAccuracyMeters)}")
     }
 
     // listener for new NMEA messages from android API
-    private val nmeaMessageListener = OnNmeaMessageListener { nmea, _ ->
-        val solution = nmeaDecoder.getSolution(nmea.trim())
-        // update actual position
-        when (solution.type) {
-            // android does not seem to send GST messages, get accuracy from location listener
-            NMEADecoder.SolutionType.POSITION -> sendBroadcast(Intent(PositioningLibrary.UPDATE)
-                    .putExtra(PositioningLibrary.POSITION, solution.position!!.apply {
-                        setHAcc(lastAccuracies.first)
-                        setVAcc(lastAccuracies.second)
-                    })) // send actual position and add accuracy
-            else -> return@OnNmeaMessageListener
-        }
-    }
+    private val nmeaMessageListener = OnNmeaMessageListener { nmea, _ -> nmeaDecoder.decode(nmea.trim()) }
 
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

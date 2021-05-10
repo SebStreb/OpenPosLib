@@ -8,6 +8,8 @@ import com.programmerare.crsConstants.constantsByAreaNameNumber.v9_8_9.EpsgNumbe
 import com.programmerare.crsTransformations.compositeTransformations.CrsTransformationAdapterCompositeFactory.createCrsTransformationMedian
 import com.programmerare.crsTransformations.coordinate.latLon
 import kotlinx.parcelize.Parcelize
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 
 /**
@@ -18,10 +20,14 @@ import kotlinx.parcelize.Parcelize
 data class Position internal constructor(
         private var lat: Double = 0.0,
         private var lon: Double = 0.0,
+
         private var alt: Double = 0.0,
-        private var diff: Double = 0.0,
-        private var hAcc: Float = 0f,
-        private var vAcc: Float = 0f,
+        private var height: Double = 0.0,
+
+        private var latAcc: Double = 0.0,
+        private var lonAcc: Double = 0.0,
+        private var altAcc: Double = 0.0,
+
         private var time: Long = 0L,
 ) : Parcelable { // public val backed up by private var so we can use internal setters
 
@@ -42,40 +48,44 @@ data class Position internal constructor(
      * Warning: Android [Location.getAltitude] uses ellipsoid height instead of orthometric height.
      */
     val altitude get() = alt
-    /**
-     * Subtract [antennaSize] from [altitude] to correct actual value.
-     */
-    internal fun adjustAntennaSize(antennaSize: Double) { alt -= antennaSize }
-
-    /**
-     * Difference in height between geoid and ellipsoid  WGS84 model at this position, in meters.
-     * For ZED-FP9 antenna, the geoid model is EGM96. TODO check?
-     */
-    val geoidHeight get() = diff
 
     /**
      * Height of the position above the WGS84 ellipsoid, in meters.
      */
-    val ellipsoidHeight get() = altitude + geoidHeight
-
-
-    /**
-     * Horizontal accuracy of the position measurement (horizontal latitude/longitude radius standard deviation), in meters.
-     */
-    val horizontalAccuracy get() = hAcc
-    /**
-     * Change [horizontalAccuracy] value when it is available.
-     */
-    internal fun setHAcc(acc: Float) { hAcc = acc }
+    val ellipsoidHeight get() = height
 
     /**
-     * Vertical accuracy of the position measurement (altitude standard deviation), in meters.
+     * Difference in height between geoid and ellipsoid WGS84 model at this position, in meters.
      */
-    val verticalAccuracy get() = vAcc
+    val geoidHeight get() = height - alt
+
     /**
-     * Change [verticalAccuracy] value when it is available.
+     * Adjust altitude and height to correct antenna size.
      */
-    internal fun setVAcc(acc: Float) { vAcc = acc }
+    internal fun adjustAntennaSize(antennaSize: Double) {
+        alt -= antennaSize
+        height -= antennaSize
+    }
+
+    /**
+     * Standard deviation of the [latitude] measurement, in meters.
+     */
+    val latitudeAccuracy get() = latAcc
+
+    /**
+     * Standard deviation of the [longitude] measurement, in meters.
+     */
+    val longitudeAccuracy get() = lonAcc
+
+    /**
+     * Standard deviation the measurement (horizontal latitude/longitude radius), in meters.
+     */
+    val horizontalAccuracy get() = sqrt(latAcc.pow(2) + lonAcc.pow(2))
+
+    /**
+     * Standard deviation of the [altitude] (and [ellipsoidHeight]) measurement, in meters.
+     */
+    val verticalAccuracy get() = altAcc
 
 
     /**
@@ -93,8 +103,8 @@ data class Position internal constructor(
         latitude = this@Position.latitude
         longitude = this@Position.longitude
         altitude = ellipsoidHeight
-        accuracy = horizontalAccuracy
-        verticalAccuracyMeters = verticalAccuracy
+        accuracy = horizontalAccuracy.toFloat()
+        verticalAccuracyMeters = verticalAccuracy.toFloat()
         time = timestamp
     }
 
@@ -111,12 +121,13 @@ data class Position internal constructor(
 
         val after = createCrsTransformationMedian().transform(before, epsgNumber)
         if (!after.isSuccess || !after.isReliable(4, 0.01)) {
-            Log.wtf("Transform", "not working: $after")
+            Log.wtf("Transform", "not working: $epsgNumber")
             return null
         }
 
         return Pair(after.outputCoordinate.getX(), after.outputCoordinate.getY())
     }
+
     /**
      * Get a CRS Coordinate from transformation library corresponding to this [Position] in WGS 84.
      *
@@ -129,29 +140,30 @@ data class Position internal constructor(
     companion object {
 
         /**
-         * Create a [Position] object from an Android [Location] object.
-         *
-         * @param location the android location object
-         * @return the corresponding position object
-         */
-        fun fromLocation(location: Location) = Position(location.latitude, location.longitude,
-                location.altitude, 0.0, // TODO separate altitude & geoid height from ellipsoid height
-                location.accuracy, location.verticalAccuracyMeters, location.time)
-
-        /**
          * Create a [Position] object from coordinates in WGS84 datum.
          *
          * @param lat latitude in degrees relative to WGS84 ellipsoid
          * @param lon latitude in degrees relative to WGS84 ellipsoid
+         *
          * @param alt altitude in meters above mean sea level (WGS84 geoid)
-         * @param diff difference in height between geoid and ellipsoid  WGS84 model at this position
-         * @param hAcc horizontal accuracy in meters
-         * @param vAcc vertical accuracy in meters
+         * @param height height in meters above WGS84 ellipsoid
+         *
+         *
+         *
+         * @param latAcc latitude standard deviation in meters
+         * @param lonAcc longitude standard deviation in meters
+         * @param altAcc altitude standard deviation in meters
+         *
          * @param time UTC timestamp of the position measurement in milliseconds since January 1, 1970
+         *
          * @return the corresponding position object
          */
-        fun fromWGS84(lat: Double, lon: Double, alt: Double, diff: Double, hAcc: Float, vAcc: Float, time: Long) =
-                Position(lat, lon, alt, diff, hAcc, vAcc, time)
+        fun fromWGS84(
+            lat: Double, lon: Double,
+            alt: Double, height: Double,
+            latAcc: Double, lonAcc: Double, altAcc: Double,
+            time: Long) =
+                Position(lat, lon, alt, height, latAcc, lonAcc, altAcc, time)
 
         /**
          * Create a [Position] object from coordinates retrieved in an NMEA GGA message, in WGS84 datum.
@@ -165,7 +177,7 @@ data class Position internal constructor(
          * @return the corresponding position object
          */
         internal fun fromGGA(time: Long, lat: Double, lon: Double, alt: Double, gHeight: Double) =
-                Position(lat = lat, lon = lon, alt = alt, diff = gHeight, time = time)
+                Position(lat = lat, lon = lon, alt = alt, height = alt + gHeight, time = time)
 
     }
 

@@ -4,47 +4,54 @@ import android.util.Log
 import be.ac.ucl.positioning_library.objects.Position
 import java.time.Instant
 import java.time.LocalDate
-import kotlin.math.pow
-import kotlin.math.sqrt
 
 
 /**
  * Decode NMEA messages.
  */
-internal class NMEADecoder {
+internal class NMEADecoder(private val positionListener: PositionListener) {
 
     companion object { private const val TAG = "NMEADecoder" }
 
-    /**
-     * Type of possible [Solution].
-     */
-    enum class SolutionType {
+    fun interface PositionListener { fun onPosition(position: Position) }
 
-        /**
-         * No solution decoded.
-         */
-        INVALID,
+    private enum class Datum(val desc: String) { WGS_84("W84") }
 
-        /**
-         * Decoded new accuracies.
-         */
-        ACCURACIES,
+    private inner class PartialPosition(
+        val timestamp: Long,
 
-        /**
-         * Decoded new position.
-         */
-        POSITION,
+        var lat: Double = 0.0,
+        var lon: Double = 0.0,
+        var alt: Double = 0.0,
+        var gHeight: Double = 0.0,
+        var hasCoordinates: Boolean = false,
 
+        var latAcc: Double = 0.0,
+        var lonAcc: Double = 0.0,
+        var altAcc: Double = 0.0,
+        var hasAccuracies: Boolean = false,
+    ) {
+        fun setCoordinates(lat: Double, lon: Double, alt: Double, gHeight: Double) {
+            hasCoordinates = true
+            this.lat = lat
+            this.lon = lon
+            this.alt = alt
+            this.gHeight = gHeight
+        }
+
+        fun setAccuracies(latAcc: Double, lonAcc: Double, altAcc: Double) {
+            hasAccuracies = true
+            this.latAcc = latAcc
+            this.lonAcc = lonAcc
+            this.altAcc = altAcc
+        }
+
+        val isComplete get() = hasCoordinates && hasAccuracies
+
+        fun toPosition() = when (currentDatum) {
+            Datum.WGS_84 -> Position.fromWGS84(lat, lon, alt, alt+gHeight, latAcc, lonAcc, altAcc, timestamp)
+        }
     }
-
-    /**
-     * Solution received when decoding an NMEA.
-     *
-     * @property type type of the solution decoded
-     * @property accuracies decoded accuracies, not null if [type] is [SolutionType.ACCURACIES]
-     * @property position decoded position, not null if [type] is [SolutionType.POSITION]
-     */
-    data class Solution(val type: SolutionType, val accuracies: Pair<Float, Float>? = null, val position: Position? = null)
 
 
     /**
@@ -54,6 +61,9 @@ internal class NMEADecoder {
 
     // Last incomplete data received for reconstruction of data bigger than buffer
     private var incompleteData = String()
+
+    private var partialPosition: PartialPosition? = null
+    private var currentDatum = Datum.WGS_84
 
 
     /**
@@ -80,105 +90,169 @@ internal class NMEADecoder {
 
 
     /**
-     * Decode an NMEA message.
+     * Decode an NMEA message and update partial position.
      *
      * @param data the NMEA to decode with checksum and without line ending
-     * @return a [Solution] describing what was decoded
      */
-    fun getSolution(data: String): Solution {
-        val sentence = data.drop(1).dropLast(3) // all between $ and *
-        val checksum = data.takeLast(2) // checksum of sentence
+    fun decode(data: String) {
+        // separate sentence & checksum
+        // some android generated NMEA have no checksum to check
+        val sentence: String
+        if (data[0] == '$' && data[data.length - 3] == '*') {
+            sentence = data.drop(1).dropLast(3) // all between $ and *
 
-        // FIXME PGLOR have no checksum ?!
-        if (!validateChecksum(sentence, checksum)) {
-            Log.d(TAG, "Wrong checksum: $data, expected ${computeChecksum(sentence)}")
-            return Solution(SolutionType.INVALID)
-        }
+            if (!validateChecksum(sentence, data.takeLast(2))) {
+                Log.d(TAG, "Wrong checksum: $data")
+                return
+            }
+        } else sentence = if (data[0] == '$') data.drop(1) else data
 
-        val nmea = sentence.split(",") // remove checksum and get fields
-        return when { // check type of NMEA
-            nmea[0].contains("GST") -> parseGST(nmea)
+        // separate fields
+        val nmea = sentence.split(",")
+        when { // check type of NMEA
             nmea[0].contains("GGA") -> {
                 // update last GGA
                 lastGGA = data
                 parseGGA(nmea)
             }
-            nmea[0].contains("DTM") || nmea[0].contains("GNS") -> {
-                Log.wtf(TAG, "found some ${nmea[0]}")
-                Solution(SolutionType.INVALID)
-            }
-            else -> Solution(SolutionType.INVALID) // no information to get from other NMEA
+            nmea[0].contains("GST") -> parseGST(nmea)
+            nmea[0].contains("DTM") -> parseDTM(nmea)
+            // else -> Log.d(TAG, "Nothing to do for NMEA ${nmea[0]}")
         }
-    }
 
+        if (partialPosition?.isComplete == true) positionListener.onPosition(partialPosition!!.toPosition())
+    }
 
     /**
-     * Decode a GST NMEA message.
+     * Because Android API doesn't give GST messages, set manually accuracies values from location updates.
      *
-     * @param nmea the GST to decode
-     * @return a [Solution] with the decoded accuracy, or an [SolutionType.INVALID] solution if the GST is not valid
+     * @param hAcc horizontal accuracy, standard deviation in meters
+     * @param altAcc altitude standard deviation in meters
      */
-    private fun parseGST(nmea: List<String>): Solution {
-        Log.d(TAG, nmea.joinToString(","))
-
-        // check if GST is valid
-        if (nmea.size != 9 || !validate(nmea[6]) || !validate(nmea[7]) || !validate((nmea[8]))) {
-            Log.d(TAG, "invalid GST")
-            return Solution(SolutionType.INVALID)
+    fun setAccuraciesFromAndroidAPI(hAcc: Double, altAcc: Double) {
+        if (partialPosition != null) {
+            partialPosition!!.hasAccuracies = true
+            partialPosition!!.latAcc = hAcc // use hAcc as estimate for both latAcc & lonAcc
+            partialPosition!!.lonAcc = hAcc
+            partialPosition!!.altAcc = altAcc
+            if (partialPosition?.isComplete == true) positionListener.onPosition(partialPosition!!.toPosition())
         }
-
-        // get accuracies from GST
-        val hAcc = sqrt(nmea[6].toDouble().pow(2) + nmea[7].toDouble().pow(2)).toFloat()
-        val vAcc = nmea[8].toFloat()
-
-        Log.d(TAG, "hAcc: ${"%.2f m".format(hAcc)}")
-        Log.d(TAG, "vAcc: ${"%.2f m".format(vAcc)}")
-
-        return Solution(SolutionType.ACCURACIES, accuracies = Pair(hAcc, vAcc))
     }
+
 
     /**
      * Decode a GGA NMEA message.
      *
      * @param nmea the GGA to decode
-     * @return a [Solution] with the decoded coordinates, or an [SolutionType.INVALID] solution if the GGA is not valid
      */
-    private fun parseGGA(nmea: List<String>): Solution {
-        Log.d(TAG, nmea.joinToString(","))
-
+    private fun parseGGA(nmea: List<String>) {
         // check if GGA is valid
         if (nmea.size < 13 || !validate(nmea[1]) ||
-                !validate(nmea[2]) || nmea[3] !in listOf("N", "S") ||
-                !validate(nmea[4]) || nmea[5] !in listOf("E", "W") ||
-                !validate(nmea[9]) || !validate(nmea[11])) {
+            !validate(nmea[2]) || nmea[3] !in listOf("N", "S") ||
+            !validate(nmea[4]) || nmea[5] !in listOf("E", "W") ||
+            !validate(nmea[9]) || !validate(nmea[11])) {
             Log.d(TAG, "invalid GGA")
-            return Solution(SolutionType.INVALID)
+            return
         }
 
-        val dateTimestamp = LocalDate.now().toEpochDay() * 24*60*60*1000
-        val hourTimestamp = nmea[1].substring(0, 2).toLong() * 60*60*1000
-        val minuteTimestamp = nmea[1].substring(2, 4).toLong() * 60*1000
-        val secondTimestamp = nmea[1].substring(4, 6).toLong() * 1000
-        val millisecondTimestamp = nmea[1].substring(7).toLong()
-
-        // get coordinates from GGA
-        val timestamp = dateTimestamp + hourTimestamp + minuteTimestamp + secondTimestamp + millisecondTimestamp
+        // get GGA values
+        val timestamp = parseTimestamp(nmea[1])
         val lat = dms2lla(nmea[2], nmea[3])
         val lon = dms2lla(nmea[4], nmea[5])
         val alt = nmea[9].toDouble()
-        val offset = nmea[11].toDouble()
+        val gHeight = nmea[11].toDouble()
 
+        // log GGA values
         Log.d(TAG, "timestamp: ${Instant.ofEpochMilli(timestamp)}")
         Log.d(TAG, "lat: ${"%.6f".format(lat)}")
         Log.d(TAG, "lon: ${"%.6f".format(lon)}")
         Log.d(TAG, "alt: ${"%.2f m".format(alt)}")
-        Log.d(TAG, "gHeight: ${"%.2f m".format(offset)}")
+        Log.d(TAG, "gHeight: ${"%.2f m".format(gHeight)}")
 
-        return Solution(SolutionType.POSITION, position = Position.fromGGA(timestamp, lat, lon, alt, offset))
+        // update partial position
+        val lastTimestamp = partialPosition?.timestamp ?: 0L
+        if (timestamp < lastTimestamp) return // ignore old timestamp
+        else if (timestamp > lastTimestamp) partialPosition = PartialPosition(timestamp) // move to new timestamp
+        partialPosition!!.setCoordinates(lat, lon, alt, gHeight) // update coordinates
+    }
+
+    /**
+     * Decode a GST NMEA message.
+     *
+     * @param nmea the GST to decode
+     */
+    private fun parseGST(nmea: List<String>) {
+        // check if GST is valid
+        if (nmea.size != 9 || !validate(nmea[1]) ||
+                !validate(nmea[6]) || !validate(nmea[7]) || !validate((nmea[8]))) {
+            Log.d(TAG, "invalid GST")
+            return
+        }
+
+        // get GST values
+        val timestamp = parseTimestamp(nmea[1])
+        val latAcc = nmea[6].toDouble()
+        val lonAcc = nmea[7].toDouble()
+        val altAcc = nmea[8].toDouble()
+
+        // log GST values
+        Log.d(TAG, "timestamp: ${Instant.ofEpochMilli(timestamp)}")
+        Log.d(TAG, "latAcc: ${"%.2f m".format(latAcc)}")
+        Log.d(TAG, "lonAcc: ${"%.2f m".format(lonAcc)}")
+        Log.d(TAG, "altAcc: ${"%.2f m".format(altAcc)}")
+
+        // update partial position
+        val lastTimestamp = partialPosition?.timestamp ?: 0L
+        if (timestamp < lastTimestamp) return // ignore old timestamp
+        else if (timestamp > lastTimestamp) partialPosition = PartialPosition(timestamp) // move to new timestamp
+        partialPosition!!.setAccuracies(latAcc, lonAcc, altAcc) // update accuracies
+    }
+
+    /**
+     * Decode a DTM NMEA message
+     *
+     * @param nmea the DTM to decode
+     */
+    private fun parseDTM(nmea: List<String>) {
+        // check if DTM is valid
+        if (nmea.size != 9) {
+            Log.d(TAG, "invalid DTM")
+            return
+        }
+
+        // get DTM values
+        val datumDesc = nmea[1]
+        var found = false
+        for (datum in Datum.values()) {
+            if (datum.desc == datumDesc) {
+                currentDatum = datum
+                found = true
+                break
+            }
+        }
+
+        // log DTM values
+        if (!found) Log.wtf(TAG, "Not supported datum: $datumDesc")
+        else Log.d(TAG, "Switched to datum: ${currentDatum.desc}")
     }
 
 
+    /**
+     * Check if an NMEA checksum is the expected one
+     *
+     * @param sentence the NMEA sentence to check
+     * @param checksum the provided NMEA checksum
+     * @return true if the checksum is correct, false otherwise
+     */
     private fun validateChecksum(sentence: String, checksum: String) = computeChecksum(sentence).equals(checksum, ignoreCase = true)
+
+    /**
+     * Compute an NMEA checksum for an NMEA sentence
+     *
+     * @param sentence the NMEA sentence
+     * @return the NMEA checksum
+     */
+    private fun computeChecksum(sentence: String) = sentence.fold(0) { acc, char -> acc xor char.toInt() }.toString(16).padStart(2, '0')
 
     /**
      * Check if an NMEA field represents a [Double].
@@ -189,8 +263,20 @@ internal class NMEADecoder {
     private fun validate(value: String) = value.toDoubleOrNull() != null
 
 
-    private fun computeChecksum(sentence: String) = sentence.fold(0) { acc, char -> acc xor char.toInt() }
-            .toString(16).padStart(2, '0')
+    /**
+     * Convert NMEA UTC fix time to timestamp
+     *
+     * @param field the NMEA time field
+     * @return the timestamp
+     */
+    private fun parseTimestamp(field: String): Long {
+        val dateTimestamp = LocalDate.now().toEpochDay() * 24*60*60*1000
+        val hourTimestamp = field.substring(0, 2).toLong() * 60*60*1000
+        val minuteTimestamp = field.substring(2, 4).toLong() * 60*1000
+        val secondTimestamp = field.substring(4, 6).toLong() * 1000
+        val millisecondTimestamp = field.substring(7).toLong()
+        return dateTimestamp + hourTimestamp + minuteTimestamp + secondTimestamp + millisecondTimestamp
+    }
 
     /**
      * Convert latitude and longitude from degree/minute/second string form to degrees in decimal form.
