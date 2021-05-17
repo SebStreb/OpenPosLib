@@ -34,7 +34,22 @@ internal class BasicService : Service() {
     private lateinit var handler: Handler
 
     // object to decode NMEA messages
-    private var nmeaDecoder = NMEADecoder { position ->
+    private var nmeaDecoder = NMEADecoder(0.0) { position ->
+        // check stats
+        if (PositioningLibrary.firstPosition) {
+            PositioningLibrary.firstPosition = false
+            Log.wtf(PositioningLibrary.STATS, "First position at timestamp ${System.currentTimeMillis()}")
+        }
+        if (PositioningLibrary.firstClose && position.horizontalAccuracy < 1) {
+            PositioningLibrary.firstClose = false
+            Log.wtf(PositioningLibrary.STATS, "First position at 1m accuracy at timestamp ${System.currentTimeMillis()}")
+        }
+        if (PositioningLibrary.firstPrecise && position.horizontalAccuracy < 0.15) {
+            PositioningLibrary.firstPrecise = false
+            Log.wtf(PositioningLibrary.STATS, "First position at 15cm accuracy at timestamp ${System.currentTimeMillis()}")
+        }
+
+        // share position
         sendBroadcast(Intent(PositioningLibrary.UPDATE).putExtra(PositioningLibrary.POSITION, position))
     }
 

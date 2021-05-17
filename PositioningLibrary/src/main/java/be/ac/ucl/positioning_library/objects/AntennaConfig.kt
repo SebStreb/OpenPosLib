@@ -1,9 +1,7 @@
 package be.ac.ucl.positioning_library.objects
 
-import android.hardware.usb.UsbDevice
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
-import be.ac.ucl.positioning_library.PositioningLibrary
 
 
 /**

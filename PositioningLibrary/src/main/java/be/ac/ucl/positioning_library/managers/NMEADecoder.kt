@@ -1,22 +1,63 @@
 package be.ac.ucl.positioning_library.managers
 
 import android.util.Log
+import be.ac.ucl.positioning_library.PositioningLibrary
 import be.ac.ucl.positioning_library.objects.Position
 import java.time.Instant
 import java.time.LocalDate
+import kotlin.math.sqrt
 
 
 /**
  * Decode NMEA messages.
  */
-internal class NMEADecoder(private val positionListener: PositionListener) {
+internal class NMEADecoder(private var heightOffset: Double, private val positionListener: PositionListener) {
 
     companion object { private const val TAG = "NMEADecoder" }
 
-    fun interface PositionListener { fun onPosition(position: Position) }
 
-    private enum class Datum(val desc: String) { WGS_84("W84") }
+    /**
+     * Callback for decoded positions.
+     */
+    fun interface PositionListener {
+        /**
+         * Callback called when a position has been decoded.
+         *
+         * @param position the decoded position
+         */
+        fun onPosition(position: Position)
+    }
 
+
+    /**
+     * Supported datums by the library.
+     *
+     * @property desc string description of the datum used by NMEA DTM messages
+     */
+    private enum class Datum(val desc: String) {
+
+        /**
+         * World Geodetic System 1984: https://epsg.io/6326-datum
+         */
+        WGS_84("W84"),
+
+    }
+
+
+    /**
+     * Partial decoded [Position], with potentially some information missing.
+     *
+     * @property timestamp decoded [Position.timestamp], always present
+     * @property lat decoded [Position.latitude], present if [hasCoordinates] is true
+     * @property lon decoded [Position.longitude], present if [hasCoordinates] is true
+     * @property alt decoded [Position.altitude], present if [hasCoordinates] is true
+     * @property gHeight decoded [Position.geoidHeight], present if [hasCoordinates] is true
+     * @property hasCoordinates true if coordinate information are present in partial position, false otherwise
+     * @property latAcc decoded [Position.latitudeAccuracy], present if [hasAccuracies] is true
+     * @property lonAcc decoded [Position.longitudeAccuracy], present if [hasAccuracies] is true
+     * @property altAcc decoded [Position.verticalAccuracy], present if [hasAccuracies] is true
+     * @property hasAccuracies true if accuracy information are present in partial position, false otherwise
+     */
     private inner class PartialPosition(
         val timestamp: Long,
 
@@ -31,14 +72,30 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
         var altAcc: Double = 0.0,
         var hasAccuracies: Boolean = false,
     ) {
+
+        /**
+         * Register coordinates information in partial position.
+         *
+         * @param lat decoded [Position.latitude]
+         * @param lon decoded [Position.longitude]
+         * @param alt decoded [Position.altitude]
+         * @param gHeight decoded [Position.geoidHeight]
+         */
         fun setCoordinates(lat: Double, lon: Double, alt: Double, gHeight: Double) {
             hasCoordinates = true
             this.lat = lat
             this.lon = lon
-            this.alt = alt
+            this.alt = alt - heightOffset
             this.gHeight = gHeight
         }
 
+        /**
+         * Register accuracy information in partial position.
+         *
+         * @param latAcc decoded [Position.latitudeAccuracy]
+         * @param lonAcc decoded [Position.longitudeAccuracy]
+         * @param altAcc decoded [Position.verticalAccuracy]
+         */
         fun setAccuracies(latAcc: Double, lonAcc: Double, altAcc: Double) {
             hasAccuracies = true
             this.latAcc = latAcc
@@ -46,23 +103,35 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
             this.altAcc = altAcc
         }
 
+        /**
+         * True if all information are present in partial position, false otherwise.
+         */
         val isComplete get() = hasCoordinates && hasAccuracies
 
+        /**
+         * Get the corresponding [Position] when partial position [isComplete]
+         *
+         * @return the corresponding [Position]
+         */
         fun toPosition() = when (currentDatum) {
-            Datum.WGS_84 -> Position.fromWGS84(lat, lon, alt, alt+gHeight, latAcc, lonAcc, altAcc, timestamp)
+            Datum.WGS_84 -> Position.fromWGS84(timestamp, lat, lon, alt, alt+gHeight, latAcc, lonAcc, altAcc)
         }
     }
 
 
     /**
-     * Last GGA message decoded.
+     * Last decoded GGA message.
      */
     var lastGGA = String()
+
 
     // Last incomplete data received for reconstruction of data bigger than buffer
     private var incompleteData = String()
 
+    // Current partial decoded position, null if none
     private var partialPosition: PartialPosition? = null
+
+    // Current datum as announced in DTM messages, default WGS84
     private var currentDatum = Datum.WGS_84
 
 
@@ -124,19 +193,19 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
     }
 
     /**
-     * Because Android API doesn't give GST messages, set manually accuracies values from location updates.
+     * Because Android API doesn't give GST messages, set manually accuracy values from location updates.
      *
      * @param hAcc horizontal accuracy, standard deviation in meters
      * @param altAcc altitude standard deviation in meters
      */
     fun setAccuraciesFromAndroidAPI(hAcc: Double, altAcc: Double) {
-        if (partialPosition != null) {
-            partialPosition!!.hasAccuracies = true
-            partialPosition!!.latAcc = hAcc // use hAcc as estimate for both latAcc & lonAcc
-            partialPosition!!.lonAcc = hAcc
-            partialPosition!!.altAcc = altAcc
-            if (partialPosition?.isComplete == true) positionListener.onPosition(partialPosition!!.toPosition())
-        }
+        // estimate latAcc & lonAcc based on hAcc
+        // hAcc = sqrt(latAcc^2 + lonAcc^2)
+        // if we take latAcc = lonAcc:
+        // latAcc = lonAcc = hAcc / sqrt(2)
+        val latLonAcc = hAcc / sqrt(2.0)
+        partialPosition?.setAccuracies(latLonAcc, latLonAcc, altAcc)
+        if (partialPosition?.isComplete == true) positionListener.onPosition(partialPosition!!.toPosition())
     }
 
 
@@ -148,9 +217,9 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
     private fun parseGGA(nmea: List<String>) {
         // check if GGA is valid
         if (nmea.size < 13 || !validate(nmea[1]) ||
-            !validate(nmea[2]) || nmea[3] !in listOf("N", "S") ||
-            !validate(nmea[4]) || nmea[5] !in listOf("E", "W") ||
-            !validate(nmea[9]) || !validate(nmea[11])) {
+                !validate(nmea[2]) || nmea[3] !in listOf("N", "S") ||
+                !validate(nmea[4]) || nmea[5] !in listOf("E", "W") ||
+                !validate(nmea[6]) || !validate(nmea[9]) || !validate(nmea[11])) {
             Log.d(TAG, "invalid GGA")
             return
         }
@@ -169,6 +238,17 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
         Log.d(TAG, "alt: ${"%.2f m".format(alt)}")
         Log.d(TAG, "gHeight: ${"%.2f m".format(gHeight)}")
 
+        val type = nmea[6].toInt()
+        if (PositioningLibrary.firstFloat && type == 5) {
+            PositioningLibrary.firstFloat = false
+            Log.wtf(PositioningLibrary.STATS, "First float at timestamp ${System.currentTimeMillis()}")
+        }
+        if (PositioningLibrary.firstFix && type == 4) {
+            PositioningLibrary.firstFix = false
+            Log.wtf(PositioningLibrary.STATS, "First fix at timestamp ${System.currentTimeMillis()}")
+        }
+
+
         // update partial position
         val lastTimestamp = partialPosition?.timestamp ?: 0L
         if (timestamp < lastTimestamp) return // ignore old timestamp
@@ -183,8 +263,7 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
      */
     private fun parseGST(nmea: List<String>) {
         // check if GST is valid
-        if (nmea.size != 9 || !validate(nmea[1]) ||
-                !validate(nmea[6]) || !validate(nmea[7]) || !validate((nmea[8]))) {
+        if (nmea.size != 9 || !validate(nmea[1]) || !validate(nmea[6]) || !validate(nmea[7]) || !validate((nmea[8]))) {
             Log.d(TAG, "invalid GST")
             return
         }
@@ -209,7 +288,7 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
     }
 
     /**
-     * Decode a DTM NMEA message
+     * Decode a DTM NMEA message.
      *
      * @param nmea the DTM to decode
      */
@@ -238,7 +317,7 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
 
 
     /**
-     * Check if an NMEA checksum is the expected one
+     * Check if an NMEA checksum is the expected one.
      *
      * @param sentence the NMEA sentence to check
      * @param checksum the provided NMEA checksum
@@ -247,12 +326,12 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
     private fun validateChecksum(sentence: String, checksum: String) = computeChecksum(sentence).equals(checksum, ignoreCase = true)
 
     /**
-     * Compute an NMEA checksum for an NMEA sentence
+     * Compute an NMEA checksum for an NMEA sentence.
      *
      * @param sentence the NMEA sentence
      * @return the NMEA checksum
      */
-    private fun computeChecksum(sentence: String) = sentence.fold(0) { acc, char -> acc xor char.toInt() }.toString(16).padStart(2, '0')
+    private fun computeChecksum(sentence: String) = sentence.fold(0) { acc, char -> acc xor char.code }.toString(16).padStart(2, '0')
 
     /**
      * Check if an NMEA field represents a [Double].
@@ -264,7 +343,7 @@ internal class NMEADecoder(private val positionListener: PositionListener) {
 
 
     /**
-     * Convert NMEA UTC fix time to timestamp
+     * Convert NMEA UTC fix time to timestamp.
      *
      * @param field the NMEA time field
      * @return the timestamp

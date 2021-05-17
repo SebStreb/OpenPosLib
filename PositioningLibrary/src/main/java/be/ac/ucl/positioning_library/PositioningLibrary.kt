@@ -21,8 +21,6 @@ import com.felhr.usbserial.UsbSerialDevice
 class PositioningLibrary(context: Context) {
 
     companion object {
-        private const val TAG = "PositioningLibrary"
-
         // identify position update
         const val UPDATE = "be.ac.ucl.gnsspositioning.UPDATE"
         const val POSITION = "position"
@@ -38,6 +36,15 @@ class PositioningLibrary(context: Context) {
 
         // list of modes requiring an external antenna
         private val antennaServices = listOf(PositioningMode.EXTERNAL, PositioningMode.EXTERNAL_RTK)
+
+        // internal values for stats
+        internal var firstPosition = false
+        internal var firstClose = false
+        internal var firstPrecise = false
+        internal var firstCorrection = false
+        internal var firstFloat = false
+        internal var firstFix = false
+        const val STATS = "PositioningLibrary-Stats"
     }
 
     // execution mode of the service
@@ -56,10 +63,12 @@ class PositioningLibrary(context: Context) {
     // plugged antenna, null if unplugged
     private var usbDevice: UsbDevice? = null
 
+
     /**
      * True if the positioning service running, false otherwise.
      */
     var running = false
+
 
     // react to service events
     private val serviceBroadcastReceiver = object : BroadcastReceiver() {
@@ -76,6 +85,7 @@ class PositioningLibrary(context: Context) {
         }
     }
 
+    // react to usb events
     private val usbBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -207,11 +217,19 @@ class PositioningLibrary(context: Context) {
                     .putExtra(ExternalService.CORS_CONFIG, corsConfig)
         }
 
-        Log.d(TAG, "Starting in mode $executionMode")
         // start service
         context.startForegroundService(intent)
 
         running = true
+
+        firstPosition = true
+        firstClose = true
+        firstPrecise = true
+        firstCorrection = true
+        firstFloat = true
+        firstFix = true
+
+        Log.wtf(STATS, "Starting on mode $executionMode at timestamp ${System.currentTimeMillis()}")
     }
 
     /**
@@ -225,7 +243,6 @@ class PositioningLibrary(context: Context) {
         intent = null
         listener = null
         running = false
-        Log.d(TAG, "Stopping service")
     }
 
 }

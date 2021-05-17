@@ -6,8 +6,8 @@ import android.hardware.usb.UsbManager
 import be.ac.ucl.positioning_library.objects.AntennaConfig
 import be.ac.ucl.positioning_library.objects.Position
 import com.felhr.usbserial.UsbSerialDevice
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.IOException
 import kotlin.concurrent.thread
@@ -16,7 +16,8 @@ import kotlin.concurrent.thread
 /**
  * Manager to handle the connection with the antenna.
  *
- * @property listener Callbacks of the manager.
+ * @property antennaConfig configuration of the connection with the antenna
+ * @property listener callbacks of the manager
  */
 internal class AntennaManager(private val antennaConfig: AntennaConfig, private val listener: Listener) {
 
@@ -71,10 +72,7 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
     private var status = Status.STOP
 
     // Object used to decode NMEA messages
-    private var nmeaDecoder = NMEADecoder { position ->
-        position.adjustAntennaSize(antennaConfig.antennaSize)
-        listener.onPosition(position)
-    }
+    private var nmeaDecoder = NMEADecoder(antennaConfig.antennaSize, listener::onPosition)
 
     /**
      * GGA NMEA message describing the last position.
@@ -151,9 +149,10 @@ internal class AntennaManager(private val antennaConfig: AntennaConfig, private 
      * @param data RTK correction data sent by CORS server
      * @param len number of bytes of the data to send
      */
+    @Suppress("BlockingMethodInNonBlockingContext") // false positive with context IO
     fun sendCorrections(data: ByteArray, len: Int) {
         // only send corrections if antenna is started
-        if (status == Status.STARTED) GlobalScope.launch(Dispatchers.IO) { // send on IO thread
+        if (status == Status.STARTED) CoroutineScope(Dispatchers.IO).launch { // send on IO thread
             // send correction if all is working, ignore errors (?)
             try { antenna?.outputStream?.write(data, 0, len) } catch (_: IOException) {}
         }

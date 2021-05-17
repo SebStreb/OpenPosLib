@@ -5,6 +5,7 @@ import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.os.Handler
 import android.os.IBinder
+import android.util.Log
 import be.ac.ucl.positioning_library.PositioningLibrary
 import be.ac.ucl.positioning_library.R
 import be.ac.ucl.positioning_library.managers.AntennaManager
@@ -73,6 +74,20 @@ internal class ExternalService : Service() {
         // setup communication with cors server and antenna
         antennaManager = AntennaManager(antennaConfig, object : AntennaManager.Listener {
             override fun onPosition(position: Position) {
+                // check stats
+                if (PositioningLibrary.firstPosition) {
+                    PositioningLibrary.firstPosition = false
+                    Log.wtf(PositioningLibrary.STATS, "First position at timestamp ${System.currentTimeMillis()}")
+                }
+                if (PositioningLibrary.firstClose && position.horizontalAccuracy < 1) {
+                    PositioningLibrary.firstClose = false
+                    Log.wtf(PositioningLibrary.STATS, "First position at 1m accuracy at timestamp ${System.currentTimeMillis()}")
+                }
+                if (PositioningLibrary.firstPrecise && position.horizontalAccuracy < 0.15) {
+                    PositioningLibrary.firstPrecise = false
+                    Log.wtf(PositioningLibrary.STATS, "First position at 15cm accuracy at timestamp ${System.currentTimeMillis()}")
+                }
+
                 // send new device position decoded by antenna to app
                 sendBroadcast(Intent(PositioningLibrary.UPDATE).putExtra(PositioningLibrary.POSITION, position))
 
@@ -85,7 +100,14 @@ internal class ExternalService : Service() {
             override fun onStop() = error(getString(R.string.positioning_library_antenna_error)) // stop service in case of antenna error
         })
         if (corsCorrections) corsManager = CORSManager(corsConfig!!, object : CORSManager.Listener {
-            override fun onCorrections(data: ByteArray, len: Int) = antennaManager.sendCorrections(data, len) // transmit cors corrections to antenna
+            override fun onCorrections(data: ByteArray, len: Int) {
+                // check correction stat
+                if (PositioningLibrary.firstCorrection) {
+                    PositioningLibrary.firstCorrection = false
+                    Log.wtf(PositioningLibrary.STATS, "First correction at timestamp ${System.currentTimeMillis()}")
+                }
+                antennaManager.sendCorrections(data, len) // transmit cors corrections to antenna
+            }
             override fun onStop() = error(getString(R.string.positioning_library_cors_error)) // stop service in cas of cors error
         })
 
@@ -130,6 +152,7 @@ internal class ExternalService : Service() {
         stop = true
         antennaManager.stop()
         if (corsCorrections) corsManager!!.stop()
+        corsCorrections = false // help avoid relaunching cors
     }
 
 

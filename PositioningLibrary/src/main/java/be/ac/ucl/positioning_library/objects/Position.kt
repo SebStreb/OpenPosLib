@@ -15,91 +15,74 @@ import kotlin.math.sqrt
 /**
  * Geographical position.
  */
-@Suppress("unused", "MemberVisibilityCanBePrivate") // available for library usage
+@Suppress("unused") // available for library usage
 @Parcelize // parcelable so we can send through android bundles
 data class Position internal constructor(
-        private var lat: Double = 0.0,
-        private var lon: Double = 0.0,
 
-        private var alt: Double = 0.0,
-        private var height: Double = 0.0,
-
-        private var latAcc: Double = 0.0,
-        private var lonAcc: Double = 0.0,
-        private var altAcc: Double = 0.0,
-
-        private var time: Long = 0L,
-) : Parcelable { // public val backed up by private var so we can use internal setters
+    /**
+     * UTC time at which the position has been measured, in milliseconds since January 1, 1970.
+     */
+    val timestamp: Long = 0L,
 
 
     /**
      * Latitude of the position, in degrees relative to the WGS84 ellipsoid.
      */
-    val latitude get() = lat
+    val latitude: Double = 0.0,
 
     /**
      * Longitude of the position, in degrees relative to the WGS84 ellipsoid.
      */
-    val longitude get() = lon
-
+    val longitude: Double = 0.0,
 
     /**
      * Altitude of the position (orthometric height), in meters above the mean sea level (WGS84 geoid).
-     * Warning: Android [Location.getAltitude] uses ellipsoid height instead of orthometric height.
+     * Warning: Android [Location.getAltitude] uses ellipsoid height instead of orthometric height, see [ellipsoidHeight].
      */
-    val altitude get() = alt
+    var altitude: Double = 0.0,
+
 
     /**
      * Height of the position above the WGS84 ellipsoid, in meters.
      */
-    val ellipsoidHeight get() = height
-
-    /**
-     * Difference in height between geoid and ellipsoid WGS84 model at this position, in meters.
-     */
-    val geoidHeight get() = height - alt
-
-    /**
-     * Adjust altitude and height to correct antenna size.
-     */
-    internal fun adjustAntennaSize(antennaSize: Double) {
-        alt -= antennaSize
-        height -= antennaSize
-    }
+    var ellipsoidHeight: Double = 0.0,
 
     /**
      * Standard deviation of the [latitude] measurement, in meters.
      */
-    val latitudeAccuracy get() = latAcc
+    val latitudeAccuracy: Double = 0.0,
 
     /**
      * Standard deviation of the [longitude] measurement, in meters.
      */
-    val longitudeAccuracy get() = lonAcc
+    val longitudeAccuracy: Double = 0.0,
 
-    /**
-     * Standard deviation the measurement (horizontal latitude/longitude radius), in meters.
-     */
-    val horizontalAccuracy get() = sqrt(latAcc.pow(2) + lonAcc.pow(2))
 
     /**
      * Standard deviation of the [altitude] (and [ellipsoidHeight]) measurement, in meters.
      */
-    val verticalAccuracy get() = altAcc
+    val verticalAccuracy: Double = 0.0,
+
+) : Parcelable {
 
 
     /**
-     * UTC time at which the position has been measured, in milliseconds since January 1, 1970.
+     * Difference in height between geoid and ellipsoid WGS84 model at this position, in meters.
      */
-    val timestamp get() = time
+    val geoidHeight get() = ellipsoidHeight - altitude
+
+    /**
+     * Standard deviation the measurement (horizontal latitude/longitude radius), in meters.
+     */
+    val horizontalAccuracy get() = sqrt(latitudeAccuracy.pow(2) + longitudeAccuracy.pow(2))
 
 
     /**
      * Get an android [Location] corresponding to this [Position].
      *
-     * @return the corresponding location
+     * @return the corresponding [Location]
      */
-    fun toLocation(): Location = Location(LocationManager.GPS_PROVIDER).apply {
+    fun toLocation() = Location(LocationManager.GPS_PROVIDER).apply {
         latitude = this@Position.latitude
         longitude = this@Position.longitude
         altitude = ellipsoidHeight
@@ -136,19 +119,16 @@ data class Position internal constructor(
     private fun toCrsCoordinate() = latLon(latitude, longitude, EpsgNumber.WORLD__WGS_84__4326)
 
 
-
     companion object {
 
         /**
-         * Create a [Position] object from coordinates in WGS84 datum.
+         * Create a [Position] object from geographical coordinates in WGS84 datum.
          *
          * @param lat latitude in degrees relative to WGS84 ellipsoid
          * @param lon latitude in degrees relative to WGS84 ellipsoid
          *
          * @param alt altitude in meters above mean sea level (WGS84 geoid)
          * @param height height in meters above WGS84 ellipsoid
-         *
-         *
          *
          * @param latAcc latitude standard deviation in meters
          * @param lonAcc longitude standard deviation in meters
@@ -159,25 +139,11 @@ data class Position internal constructor(
          * @return the corresponding position object
          */
         fun fromWGS84(
+            time: Long,
             lat: Double, lon: Double,
             alt: Double, height: Double,
             latAcc: Double, lonAcc: Double, altAcc: Double,
-            time: Long) =
-                Position(lat, lon, alt, height, latAcc, lonAcc, altAcc, time)
-
-        /**
-         * Create a [Position] object from coordinates retrieved in an NMEA GGA message, in WGS84 datum.
-         * There is no information about accuracies in GGA message, they should be added afterwards.
-         *
-         * @param time UTC timestamp of the position measurement in milliseconds since January 1, 1970
-         * @param lat latitude in degrees relative to WGS84 ellipsoid
-         * @param lon longitude in degrees relative to WGS84 ellipsoid
-         * @param alt altitude in meters above mean sea level (WGS84 geoid)
-         * @param gHeight difference in meters of height between geoid and ellipsoid  WGS84 model at this position
-         * @return the corresponding position object
-         */
-        internal fun fromGGA(time: Long, lat: Double, lon: Double, alt: Double, gHeight: Double) =
-                Position(lat = lat, lon = lon, alt = alt, height = alt + gHeight, time = time)
+        ) = Position(time, lat, lon, alt, height, latAcc, lonAcc, altAcc)
 
     }
 
